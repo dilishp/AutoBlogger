@@ -54,10 +54,9 @@ class ImageGenerator:
         """Generate image using DALL-E"""
         try:
             response = self.client.images.generate(
-                model="dall-e-3",
+                model="dall-e-2",
                 prompt=prompt,
-                size="1024x1024",
-                quality="standard",
+                size="512x512",
                 n=1,
             )
             
