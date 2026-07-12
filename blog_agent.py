@@ -138,6 +138,11 @@ class BlogAIAgent:
                 )
                 post_result['steps'].append('image_generation')
                 post_result['images'] = image_paths
+                
+                if not image_paths:
+                    logger.info("  ℹ Image generation failed or not available - will use placeholder images")
+                else:
+                    logger.info(f"  ✓ Generated {len(image_paths)} images")
             
             # Step 4: Apply internal links
             logger.info("  - Applying internal links...")
@@ -146,23 +151,25 @@ class BlogAIAgent:
                 self.content_index
             )
             
-            # Convert to dict format and apply
-            blog_post.internal_links = []
-            for link in linking_opportunities:
-                blog_post.internal_links.append({
-                    'anchor_text': link.anchor_text,
-                    'target_url': link.target_url,
-                    'target_title': link.target_title
-                })
-            
-            # Apply links more robustly
-            if blog_post.internal_links:
+            # Apply links using the InternalLink objects directly
+            if linking_opportunities:
                 blog_post.content = self.internal_linker.apply_internal_links(
                     blog_post.content,
-                    blog_post.internal_links
+                    linking_opportunities
                 )
+                
+                # Convert to dict format for storage
+                blog_post.internal_links = []
+                for link in linking_opportunities:
+                    blog_post.internal_links.append({
+                        'anchor_text': link.anchor_text,
+                        'target_url': link.target_url,
+                        'target_title': link.target_title
+                    })
+                
                 logger.info(f"  ✓ Applied {len(blog_post.internal_links)} internal links")
             else:
+                blog_post.internal_links = []
                 logger.info("  ℹ No internal link opportunities found")
             
             post_result['steps'].append('internal_linking')

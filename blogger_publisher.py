@@ -111,7 +111,7 @@ Keywords: {', '.join(blog_post.keywords)}
             
             # Use placeholder image URL (Blogger doesn't support local file uploads via API)
             # Using a reliable placeholder service
-            image_url = f"https://via.placeholder.com/512x512/4A90E2/FFFFFF?text={alt_text[:20].replace(' ', '+')}"
+            image_url = f"https://via.placeholder.com/1024x1024/4A90E2/FFFFFF?text={alt_text[:20].replace(' ', '+')}"
             
             # If we have actual image paths, try to use them (but this won't work in Blogger)
             if image_paths and i < len(image_paths):

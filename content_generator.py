@@ -111,7 +111,7 @@ Requirements:
 9. Write in a conversational yet professional tone
 10. Include a strong conclusion with call-to-action
 11. Naturally incorporate the primary and secondary keywords
-12. Add placeholder markers for internal links: [LINK: related topic]
+12. Add placeholder markers for internal links using SPECIFIC, DESCRIPTIVE topic names like: [LINK: API design best practices], [LINK: debugging techniques], [LINK: microservices architecture] - NOT generic terms like "related topic"
 
 Return as JSON with these fields:
 - title

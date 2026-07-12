@@ -51,29 +51,81 @@ class ImageGenerator:
         return image_paths
     
     def _generate_with_dalle(self, prompt: str, index: int) -> Optional[str]:
-        """Generate image using DALL-E"""
+        """Generate image using GPT Image"""
         try:
+            logger.info(f"Attempting to generate image with model: gpt-image-2")
             response = self.client.images.generate(
-                model="dall-e-2",
+                model="gpt-image-2",
                 prompt=prompt,
-                size="512x512",
+                size="1024x1024",
                 n=1,
             )
             
-            image_url = response.data[0].url
+            # Log the complete response structure for debugging
+            logger.info(f"Image generation response type: {type(response)}")
             
-            # Download the image
-            image_path = self.output_dir / f"image_{index}.png"
-            response = requests.get(image_url)
-            response.raise_for_status()
-            
-            with open(image_path, 'wb') as f:
-                f.write(response.content)
-            
-            return str(image_path)
+            # Try different ways to access the data
+            if hasattr(response, 'data'):
+                logger.info(f"Response.data exists with {len(response.data)} items")
+                if response.data and len(response.data) > 0:
+                    first_item = response.data[0]
+                    logger.info(f"First item type: {type(first_item)}")
+                    
+                    # Check for b64_json first (as suggested, some models return this instead of URL)
+                    if hasattr(first_item, 'b64_json') and first_item.b64_json:
+                        logger.info(f"Found b64_json data (base64 encoded image)")
+                        # Handle base64 encoded image
+                        import base64
+                        image_data = base64.b64decode(first_item.b64_json)
+                        image_path = self.output_dir / f"image_{index}.png"
+                        with open(image_path, 'wb') as f:
+                            f.write(image_data)
+                        logger.info(f"Successfully saved base64 image: {image_path}")
+                        return str(image_path)
+                    
+                    # Check for URL field
+                    image_url = None
+                    if hasattr(first_item, 'url'):
+                        image_url = first_item.url
+                        logger.info(f"URL field value: {image_url}")
+                    
+                    # Check if URL is None or empty
+                    if not image_url:
+                        logger.warning("URL is None or empty in API response")
+                        logger.warning("The gpt-image-2 model may return base64 data instead of URL")
+                        return None
+                    
+                    # Download the image from URL
+                    image_path = self.output_dir / f"image_{index}.png"
+                    download_response = requests.get(image_url)
+                    download_response.raise_for_status()
+                    
+                    with open(image_path, 'wb') as f:
+                        f.write(download_response.content)
+                    
+                    logger.info(f"Successfully generated and downloaded image: {image_path}")
+                    return str(image_path)
+                else:
+                    logger.error("Response.data is empty")
+                    return None
+            else:
+                logger.error("Response has no 'data' attribute")
+                logger.error(f"Full response: {response}")
+                return None
         
         except Exception as e:
-            logger.error(f"DALL-E generation failed: {e}")
+            error_msg = str(e)
+            logger.error(f"Exception during image generation: {e}")
+            logger.error(f"Exception type: {type(e).__name__}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
+            
+            if "does not exist" in error_msg:
+                logger.warning(f"gpt-image-2 model does not exist: {e}")
+                logger.warning("Falling back to placeholder images")
+            elif "access" in error_msg.lower():
+                logger.warning(f"API access issue: {e}")
+                logger.warning("Falling back to placeholder images")
             return None
     
     def _generate_with_stability(self, prompt: str, index: int) -> Optional[str]:
@@ -191,7 +243,7 @@ Return only the alt text."""
             return "Blog post image"
     
     def create_image_varations(self, image_path: str, num_variations: int = 2) -> List[str]:
-        """Create variations of an image using DALL-E"""
+        """Create variations of an image using GPT Image"""
         logger.info(f"Creating {num_variations} image variations...")
         
         variations = []

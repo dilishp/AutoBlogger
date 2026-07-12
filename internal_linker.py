@@ -58,12 +58,37 @@ class InternalLinker:
         return index
     
     def _extract_topics(self, title: str, content: str, labels: List[str]) -> List[str]:
-        """Extract key topics from a post"""
+        """Extract key topics and keywords from a post"""
         topics = labels.copy()
         
         # Add title words (excluding common words)
         title_words = re.findall(r'\b\w{3,}\b', title.lower())
-        topics.extend([w for w in title_words if w not in ['the', 'and', 'for', 'with', 'about']])
+        common_words = {'the', 'and', 'for', 'with', 'about', 'this', 'that', 'from', 'have', 'been', 'will', 'can', 'are', 'was', 'were', 'been', 'be', 'is', 'a', 'an', 'in', 'on', 'at', 'to', 'by', 'or', 'as', 'if', 'when', 'how', 'what', 'which', 'who', 'where', 'why', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 'just', 'also', 'now', 'here', 'there', 'then', 'once', 'get', 'got', 'use', 'using', 'make', 'making', 'take', 'taking', 'come', 'coming', 'could', 'would', 'should', 'may', 'might', 'must', 'shall'}
+        topics.extend([w for w in title_words if w not in common_words])
+        
+        # Extract keywords from content (frequent meaningful words)
+        # Remove HTML tags first
+        clean_content = re.sub(r'<[^>]+>', ' ', content)
+        words = re.findall(r'\b\w{4,}\b', clean_content.lower())
+        
+        # Count word frequency
+        word_freq = {}
+        for word in words:
+            if word not in common_words:
+                word_freq[word] = word_freq.get(word, 0) + 1
+        
+        # Add top frequent words as topics (appearing 3+ times)
+        for word, freq in word_freq.items():
+            if freq >= 3:
+                topics.append(word)
+        
+        # Extract technical terms and phrases (capitalized words, hyphenated terms)
+        tech_terms = re.findall(r'\b[A-Z][a-zA-Z]+\b', content)
+        topics.extend([term.lower() for term in tech_terms])
+        
+        # Extract hyphenated terms
+        hyphenated = re.findall(r'\b\w+-\w+\b', content)
+        topics.extend(hyphenated)
         
         # Remove duplicates
         topics = list(set(topics))
@@ -78,7 +103,10 @@ class InternalLinker:
         
         new_title = new_post.get('title', '')
         new_content = new_post.get('content', '')
-        new_topics = self._extract_topics(new_title, new_content, new_post.get('tags', []))
+        new_tags = new_post.get('tags', [])
+        new_topics = self._extract_topics(new_title, new_content, new_tags)
+        
+        logger.info(f"New post topics extracted: {len(new_topics)} topics")
         
         opportunities = []
         
@@ -87,10 +115,18 @@ class InternalLinker:
             if post_data['url'] == new_post.get('url', ''):
                 continue
             
-            # Calculate relevance
+            # Calculate relevance using multiple factors
             relevance = self._calculate_relevance(new_topics, post_data['topics'])
             
-            if relevance > 0.3:  # Threshold for relevance
+            # Additional keyword matching in content
+            keyword_matches = self._find_keyword_matches(new_content, post_data['topics'], post_data['title'])
+            
+            # Boost relevance if keywords are found in content
+            if keyword_matches:
+                relevance += 0.2 * len(keyword_matches)
+                logger.info(f"Found {len(keyword_matches)} keyword matches for post: {post_data['title']}")
+            
+            if relevance > 0.2:  # Lowered threshold for more opportunities
                 # Generate anchor text
                 anchor_text = self._generate_anchor_text(new_content, post_data)
                 
@@ -127,6 +163,29 @@ class InternalLinker:
         
         return len(intersection) / len(union)
     
+    def _find_keyword_matches(self, content: str, topics: List[str], title: str) -> List[str]:
+        """Find keywords from existing posts that appear in the new content"""
+        matches = []
+        content_lower = content.lower()
+        
+        # Remove HTML tags for better matching
+        clean_content = re.sub(r'<[^>]+>', ' ', content_lower)
+        
+        for topic in topics:
+            topic_lower = topic.lower()
+            # Check if topic appears as a whole word in content
+            if re.search(r'\b' + re.escape(topic_lower) + r'\b', clean_content):
+                matches.append(topic)
+        
+        # Also check title words
+        title_words = re.findall(r'\b\w{3,}\b', title.lower())
+        for word in title_words:
+            if re.search(r'\b' + re.escape(word) + r'\b', clean_content):
+                if word not in matches:
+                    matches.append(word)
+        
+        return matches
+    
     def _generate_anchor_text(self, content: str, target_post: Dict) -> Optional[str]:
         """Generate appropriate anchor text for linking"""
         target_title = target_post['title']
@@ -152,16 +211,32 @@ class InternalLinker:
             # Find the anchor text in content
             anchor_pattern = re.escape(link.anchor_text)
             
-            # Replace first occurrence with link
-            pattern = rf'(?<!href="[^"]*)({anchor_pattern})(?![^<]*</a>)'
+            # Replace first occurrence with link (avoiding existing links)
+            # Use a simpler approach without variable-width look-behind
+            pattern = rf'({anchor_pattern})'
             replacement = f'<a href="{link.target_url}" title="{link.target_title}">\\1</a>'
             
-            new_content = re.sub(pattern, replacement, modified_content, count=1)
+            # Check if the pattern is already inside an <a> tag
+            # by looking for <a> tags before and after
+            def should_replace(match):
+                start = match.start()
+                end = match.end()
+                # Look backwards for opening <a> tag
+                before = modified_content[:start]
+                # Look forwards for closing </a> tag
+                after = modified_content[end:]
+                # If we're already inside a link, don't replace
+                if '<a' in before.rsplit('>', 1)[-1] or '</a>' in after.split('<', 1)[0]:
+                    return match.group(0)
+                return match.group(0).replace(match.group(1), f'<a href="{link.target_url}" title="{link.target_title}">{match.group(1)}</a>')
             
-            if new_content != modified_content:
-                modified_content = new_content
-                links_applied += 1
-                logger.info(f"Applied link: {link.anchor_text} -> {link.target_title}")
+            # Find all matches and replace the first one that's not already in a link
+            for match in re.finditer(pattern, modified_content):
+                if should_replace(match) != match.group(0):
+                    modified_content = modified_content[:match.start()] + should_replace(match) + modified_content[match.end():]
+                    links_applied += 1
+                    logger.info(f"Applied link: {link.anchor_text} -> {link.target_title}")
+                    break
         
         logger.info(f"Applied {links_applied}/{len(links)} internal links")
         return modified_content
@@ -170,8 +245,17 @@ class InternalLinker:
                                 content_index: Dict[str, Dict]) -> str:
         """Process [LINK: topic] placeholders and convert them to actual links"""
         import re
+        from difflib import SequenceMatcher
         
         logger.info("Processing link placeholders...")
+        
+        # Log available posts in content index for debugging
+        if content_index:
+            logger.info(f"Content index has {len(content_index)} posts available for linking")
+            available_titles = [post.get('title', 'Unknown') for post in content_index.values()]
+            logger.debug(f"Available posts: {available_titles}")
+        else:
+            logger.warning("Content index is empty - no posts available for linking")
         
         # Find all [LINK: topic] placeholders
         placeholder_pattern = r'\[LINK:\s*([^\]]+)\]'
@@ -181,36 +265,64 @@ class InternalLinker:
             logger.info("No link placeholders found")
             return content
         
-        logger.info(f"Found {len(placeholders)} link placeholders")
+        logger.info(f"Found {len(placeholders)} link placeholders: {placeholders}")
         
         modified_content = content
         links_converted = 0
         
         for placeholder_topic in placeholders:
+            # Skip generic placeholders
+            if placeholder_topic.lower() in ['related topic', 'related', 'topic', 'link']:
+                logger.warning(f"Skipping generic placeholder: '{placeholder_topic}' - too vague to match")
+                modified_content = modified_content.replace(f'[LINK: {placeholder_topic}]', placeholder_topic)
+                continue
+            
             # Search for matching post in content index
             best_match = None
             best_score = 0
+            best_match_id = None
             
             for post_id, post_data in content_index.items():
                 # Calculate relevance score
                 score = 0
                 post_title = post_data.get('title', '').lower()
                 post_topics = post_data.get('topics', [])
+                post_tags = post_data.get('tags', [])
                 
-                # Check if placeholder matches title
-                if placeholder_topic.lower() in post_title:
+                # Exact title match
+                if placeholder_topic.lower() == post_title:
+                    score += 20
+                
+                # Partial title match
+                elif placeholder_topic.lower() in post_title:
                     score += 10
                 
                 # Check if placeholder matches topics
                 for topic in post_topics:
-                    if placeholder_topic.lower() in topic.lower():
-                        score += 5
+                    if placeholder_topic.lower() == topic.lower():
+                        score += 15
+                    elif placeholder_topic.lower() in topic.lower():
+                        score += 8
+                
+                # Check if placeholder matches tags
+                for tag in post_tags:
+                    if placeholder_topic.lower() == tag.lower():
+                        score += 12
+                    elif placeholder_topic.lower() in tag.lower():
+                        score += 6
+                
+                # Fuzzy matching for similar titles
+                similarity = SequenceMatcher(None, placeholder_topic.lower(), post_title).ratio()
+                if similarity > 0.6:
+                    score += int(similarity * 10)
                 
                 if score > best_score:
                     best_score = score
                     best_match = post_data
+                    best_match_id = post_id
             
-            if best_match and best_score > 0:
+            # Use a lower threshold for matching
+            if best_match and best_score >= 6:
                 # Replace placeholder with actual link
                 post_url = best_match.get('url', '')
                 post_title = best_match.get('title', placeholder_topic)
@@ -219,11 +331,16 @@ class InternalLinker:
                     link_html = f'<a href="{post_url}" title="{post_title}">{placeholder_topic}</a>'
                     modified_content = modified_content.replace(f'[LINK: {placeholder_topic}]', link_html)
                     links_converted += 1
-                    logger.info(f"Converted placeholder: {placeholder_topic} -> {post_title}")
+                    logger.info(f"Converted placeholder: '{placeholder_topic}' -> '{post_title}' (score: {best_score})")
+                else:
+                    logger.warning(f"Match found but no URL for: {placeholder_topic}")
+                    modified_content = modified_content.replace(f'[LINK: {placeholder_topic}]', placeholder_topic)
             else:
                 # Remove placeholder if no match found
+                logger.warning(f"No match found for placeholder: '{placeholder_topic}' (best score: {best_score})")
+                if best_match:
+                    logger.warning(f"Closest match was: '{best_match.get('title', 'Unknown')}' with score {best_score}")
                 modified_content = modified_content.replace(f'[LINK: {placeholder_topic}]', placeholder_topic)
-                logger.warning(f"No match found for placeholder: {placeholder_topic}")
         
         logger.info(f"Converted {links_converted}/{len(placeholders)} link placeholders")
         return modified_content

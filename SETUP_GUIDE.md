@@ -210,6 +210,52 @@ Add to crontab:
 0 9 * * * cd /path/to/blog-ai-agent && /usr/bin/python3 blog_agent.py --mode full --num-topics 1
 ```
 
+## Rerunning with a Specific Topic
+
+If a post creation failed and you want to retry with the same topic:
+
+### Method 1: Use the Topic Directly
+
+```bash
+python blog_agent.py --mode full --topic "Your specific topic here"
+```
+
+### Method 2: Use Saved Research Results
+
+The agent saves research results in `output/research/`. To reuse a previously researched topic:
+
+1. Find the research file in `output/research/`
+2. Copy the topic from the saved file
+3. Run with that topic:
+```bash
+python blog_agent.py --mode full --topic "Practical GitHub Actions caching strategies to speed CI and cut costs"
+```
+
+### Method 3: Continue from Draft
+
+If a draft was created but publishing failed:
+
+1. Check your Blogger drafts for the incomplete post
+2. Manually publish from Blogger dashboard, OR
+3. Delete the draft and rerun the agent to create a fresh post
+
+### Common Scenarios
+
+**Post creation failed during internal linking:**
+```bash
+python blog_agent.py --mode full --topic "Your topic here"
+```
+
+**Image generation failed but content was created:**
+```bash
+python blog_agent.py --mode full --topic "Your topic here" --no-images
+```
+
+**Social media generation failed:**
+```bash
+python blog_agent.py --mode social-only --url "https://your-blog-post-url"
+```
+
 ## Troubleshooting
 
 ### Authentication Issues
