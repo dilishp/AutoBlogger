@@ -97,8 +97,9 @@ class InternalLinker:
     
     def find_linking_opportunities(self, new_post: Dict, 
                                    content_index: Dict[str, Dict],
+                                   min_links: int = 3,
                                    max_links: int = 5) -> List[InternalLink]:
-        """Find internal linking opportunities for a new post"""
+        """Find internal linking opportunities using simple keyword matching"""
         logger.info("Finding internal linking opportunities...")
         
         new_title = new_post.get('title', '')
@@ -115,18 +116,14 @@ class InternalLinker:
             if post_data['url'] == new_post.get('url', ''):
                 continue
             
-            # Calculate relevance using multiple factors
-            relevance = self._calculate_relevance(new_topics, post_data['topics'])
-            
-            # Additional keyword matching in content
+            # Simple keyword matching - check if any keywords match
             keyword_matches = self._find_keyword_matches(new_content, post_data['topics'], post_data['title'])
             
-            # Boost relevance if keywords are found in content
-            if keyword_matches:
-                relevance += 0.2 * len(keyword_matches)
-                logger.info(f"Found {len(keyword_matches)} keyword matches for post: {post_data['title']}")
+            # Also check if topics overlap
+            topic_overlap = set(new_topics) & set(post_data['topics'])
             
-            if relevance > 0.2:  # Lowered threshold for more opportunities
+            # If we have any keyword matches or topic overlap, add as opportunity
+            if keyword_matches or topic_overlap:
                 # Generate anchor text
                 anchor_text = self._generate_anchor_text(new_content, post_data)
                 
@@ -136,15 +133,38 @@ class InternalLinker:
                         target_url=post_data['url'],
                         target_title=post_data['title'],
                         context=f"Related to {post_data['title']}",
-                        relevance_score=relevance
+                        relevance_score=len(keyword_matches) + len(topic_overlap)
                     )
                     opportunities.append(link)
+                    logger.info(f"Found link opportunity: {post_data['title']} (matches: {len(keyword_matches)} keywords, {len(topic_overlap)} topics)")
         
-        # Sort by relevance and limit
-        opportunities.sort(key=lambda x: x.relevance_score, reverse=True)
+        # Ensure minimum number of links by adding recent posts if needed
+        if len(opportunities) < min_links and len(content_index) > 0:
+            logger.info(f"Only {len(opportunities)} links found, adding recent posts to meet minimum of {min_links}")
+            
+            # Get posts not already linked
+            linked_urls = {link.target_url for link in opportunities}
+            for post_id, post_data in content_index.items():
+                if post_data['url'] not in linked_urls and post_data['url'] != new_post.get('url', ''):
+                    anchor_text = self._generate_anchor_text(new_content, post_data)
+                    if anchor_text:
+                        link = InternalLink(
+                            anchor_text=anchor_text,
+                            target_url=post_data['url'],
+                            target_title=post_data['title'],
+                            context=f"Related post",
+                            relevance_score=1
+                        )
+                        opportunities.append(link)
+                        logger.info(f"Added recent post for minimum links: {post_data['title']}")
+                        
+                        if len(opportunities) >= min_links:
+                            break
+        
+        # Limit to max_links
         opportunities = opportunities[:max_links]
         
-        logger.info(f"Found {len(opportunities)} linking opportunities")
+        logger.info(f"Found {len(opportunities)} linking opportunities (minimum: {min_links})")
         return opportunities
     
     def _calculate_relevance(self, topics1: List[str], topics2: List[str]) -> float:

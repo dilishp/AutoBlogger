@@ -7,6 +7,7 @@ from pathlib import Path
 from openai import OpenAI
 from config import config
 import requests
+from cloudinary_uploader import CloudinaryUploader
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -20,11 +21,13 @@ class ImageGenerator:
         self.stability_key = config.stability_ai_key
         self.output_dir = config.output_dir / "images"
         self.output_dir.mkdir(parents=True, exist_ok=True)
+        self.cloudinary_uploader = CloudinaryUploader()
     
     def generate_images(self, prompts: List[str], 
                        use_dalle: bool = True,
-                       use_stability: bool = False) -> List[str]:
-        """Generate images from prompts"""
+                       use_stability: bool = False,
+                       upload_to_cloudinary: bool = True) -> List[str]:
+        """Generate images from prompts and optionally upload to Cloudinary"""
         logger.info(f"Generating {len(prompts)} images...")
         
         image_paths = []
@@ -48,6 +51,24 @@ class ImageGenerator:
                 continue
         
         logger.info(f"Successfully generated {len(image_paths)} images")
+        
+        # Upload to Cloudinary if enabled
+        if upload_to_cloudinary:
+            if not self.cloudinary_uploader.enabled:
+                logger.warning("Cloudinary not configured (missing credentials), skipping upload")
+                logger.info("Set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET in .env to enable")
+                return image_paths
+            
+            if image_paths:
+                logger.info("Uploading images to Cloudinary...")
+                cloudinary_urls = self.cloudinary_uploader.upload_multiple_images(image_paths)
+                if cloudinary_urls:
+                    logger.info(f"Successfully uploaded {len(cloudinary_urls)} images to Cloudinary")
+                    return cloudinary_urls
+                else:
+                    logger.warning("Cloudinary upload failed, using local paths")
+                    return image_paths
+        
         return image_paths
     
     def _generate_with_dalle(self, prompt: str, index: int) -> Optional[str]:

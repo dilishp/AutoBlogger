@@ -13,6 +13,8 @@ from image_generator import ImageGenerator
 from internal_linker import InternalLinker
 from social_media_generator import SocialMediaGenerator
 from blogger_publisher import BloggerPublisher
+from digital_product_generator import DigitalProductGenerator
+from gumroad_client import GumroadClient
 from config import config
 
 logging.basicConfig(level=logging.INFO)
@@ -33,6 +35,8 @@ class BlogAIAgent:
         self.internal_linker = InternalLinker()
         self.social_media_generator = SocialMediaGenerator()
         self.blogger_publisher = BloggerPublisher()
+        self.digital_product_generator = DigitalProductGenerator()
+        self.gumroad_client = GumroadClient()
         
         # Cache for blog content
         self.existing_posts = []
@@ -128,7 +132,69 @@ class BlogAIAgent:
             blog_post = self.content_generator.optimize_content_for_seo(blog_post)
             post_result['steps'].append('seo_optimization')
             
-            # Step 3: Generate images
+            # Step 3: Generate digital product
+            product_result = None
+            if self.gumroad_client.enabled:
+                logger.info("  - Generating digital product...")
+                try:
+                    # Determine demand level from opportunity
+                    topic_demand = 'medium'
+                    if hasattr(opportunity, 'competition') and hasattr(opportunity, 'search_volume'):
+                        if opportunity.competition < 30 and opportunity.search_volume > 1000:
+                            topic_demand = 'high'
+                        elif opportunity.competition < 20 and opportunity.search_volume > 2000:
+                            topic_demand = 'very_high'
+                        elif opportunity.competition > 70:
+                            topic_demand = 'low'
+                    
+                    product_data = self.digital_product_generator.generate_product(
+                        blog_post.title,
+                        blog_post.content,
+                        blog_post.tags,
+                        config.blog_niche,
+                        topic_demand
+                    )
+                    
+                    # Save product files
+                    saved_product = self.digital_product_generator.save_product_files(
+                        product_data,
+                        blog_post.title
+                    )
+                    
+                    # Upload to Gumroad
+                    gumroad_result = self.gumroad_client.create_product(
+                        product_data['title'],
+                        product_data['description'],
+                        product_data['pricing'],
+                        tags=blog_post.tags
+                    )
+                    
+                    if gumroad_result:
+                        product_id = gumroad_result.get('product', {}).get('id')
+                        product_url = self.gumroad_client.get_product_url(product_id)
+                        
+                        # Add product link to blog content
+                        if product_url:
+                            product_cta = f'\n\n<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; text-align: center; margin: 30px 0;">\n<h3 style="margin: 0 0 10px 0;">🚀 Get the Complete Guide</h3>\n<p style="margin: 0 0 15px 0;">Want the full implementation details, templates, and checklists?</p>\n<a href="{product_url}" style="display: inline-block; background: white; color: #667eea; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">Get the Digital Product</a>\n</div>'
+                            blog_post.content += product_cta
+                            logger.info(f"Added Gumroad product link to blog: {product_url}")
+                    
+                    product_result = {
+                        'success': True,
+                        'folder': saved_product['folder'],
+                        'files': saved_product['files'],
+                        'gumroad_url': product_url if gumroad_result else None
+                    }
+                    post_result['steps'].append('digital_product_generation')
+                    post_result['digital_product'] = product_result
+                    
+                except Exception as e:
+                    logger.error(f"Digital product generation failed: {e}")
+                    product_result = {'success': False, 'error': str(e)}
+            else:
+                logger.info("  ℹ Gumroad not configured, skipping digital product generation")
+            
+            # Step 4: Generate images
             image_paths = []
             if generate_images:
                 logger.info("  - Generating images...")
@@ -144,7 +210,7 @@ class BlogAIAgent:
                 else:
                     logger.info(f"  ✓ Generated {len(image_paths)} images")
             
-            # Step 4: Apply internal links
+            # Step 5: Apply internal links
             logger.info("  - Applying internal links...")
             linking_opportunities = self.internal_linker.find_linking_opportunities(
                 {'title': blog_post.title, 'content': blog_post.content},
@@ -175,12 +241,12 @@ class BlogAIAgent:
             post_result['steps'].append('internal_linking')
             post_result['internal_links'] = len(blog_post.internal_links)
             
-            # Step 5: Analyze font style from existing posts
+            # Step 6: Analyze font style from existing posts
             logger.info("  - Analyzing font style from existing posts...")
             font_style = self.blogger_publisher.analyze_font_style(self.existing_posts)
             logger.info(f"  ✓ Using font style: {font_style}")
             
-            # Step 6: Publish to Blogger
+            # Step 7: Publish to Blogger
             logger.info("  - Publishing to Blogger...")
             publish_result = self.blogger_publisher.publish_blog_post(
                 blog_post,
@@ -197,7 +263,7 @@ class BlogAIAgent:
                 blog_post_url = publish_result.get('url', '')
                 post_result['url'] = blog_post_url
                 
-                # Step 7: Generate social media posts
+                # Step 8: Generate social media posts
                 logger.info("  - Generating social media posts...")
                 blog_post_dict = {
                     'title': blog_post.title,

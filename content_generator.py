@@ -81,43 +81,67 @@ class ContentGenerator:
             messages=[
                 {
                     "role": "system",
-                    "content": f"""You are an expert blog writer and SEO specialist. 
-                    Write engaging, well-structured blog posts that are optimized for search engines.
+                    "content": f"""You are an elite content writer and SEO specialist specializing in {self.blog_niche}. 
+                    You write engaging, well-structured blog posts that are optimized for search engines and provide genuine value to {self.target_audience}.
+                    
+                    Your writing style:
+                    - Authoritative yet accessible
+                    - Data-driven with specific examples
+                    - Action-oriented with clear takeaways
+                    - Current with industry trends and best practices
+                    - Focused on solving real problems
                     
                     Blog niche: {self.blog_niche}
                     Target audience: {self.target_audience}
-                    Blog domain: {self.blog_domain}"""
+                    Blog domain: {self.blog_domain}
+                    
+                    Quality standards:
+                    - Include specific statistics, metrics, or research findings
+                    - Use real-world examples and case studies
+                    - Provide actionable insights readers can implement immediately
+                    - Avoid fluff and generic advice
+                    - Include unique perspectives or contrarian views when appropriate
+                    - Reference industry leaders or authoritative sources"""
                 },
                 {
                     "role": "user",
-                    "content": f"""Write a comprehensive blog post based on this topic opportunity:
+                    "content": f"""Write a high-quality, engaging blog post based on this topic opportunity:
 
 Topic: {opportunity.topic}
 Suggested Title: {opportunity.suggested_title}
 Keywords: {', '.join(opportunity.keywords)}
+Search Volume: {opportunity.search_volume if hasattr(opportunity, 'search_volume') else 'N/A'}
+Competition Level: {opportunity.competition if hasattr(opportunity, 'competition') else 'N/A'}
 Content Outline:
 {chr(10).join(f'- {point}' for point in opportunity.content_outline)}
 {competitor_info}
 
 Requirements:
-1. Use the suggested title or create a better SEO-optimized title
-2. Write 1500-2500 words of high-quality content
-3. Format code examples using HTML: <code> for inline code, <pre><code> for multi-line code blocks
-4. Use proper HTML formatting throughout (paragraphs, headings, lists)
-5. Include [IMAGE: description] markers where images should be inserted
-6. Include a compelling introduction that hooks the reader
-7. Use clear H2 and H3 headings for structure
-8. Include practical examples and actionable advice
-9. Write in a conversational yet professional tone
-10. Include a strong conclusion with call-to-action
-11. Naturally incorporate the primary and secondary keywords
-12. Add placeholder markers for internal links using SPECIFIC, DESCRIPTIVE topic names like: [LINK: API design best practices], [LINK: debugging techniques], [LINK: microservices architecture] - NOT generic terms like "related topic"
+1. Use the suggested title or create a better SEO-optimized title that includes primary keyword
+2. Write 800-1200 words of high-quality content (shorter overview format)
+3. Include 2-3 specific statistics, research findings, or data points
+4. Include at least 1 real-world example or case study
+5. Format code examples using HTML: <code> for inline code, <pre><code> for multi-line code blocks
+6. Use proper HTML formatting throughout (paragraphs, headings, lists)
+7. Include [IMAGE: description] markers where images should be inserted
+8. Include a compelling introduction that hooks the reader with a surprising fact or statistic
+9. Use clear H2 and H3 headings for structure
+10. Include practical examples and actionable advice
+11. Write in a conversational yet professional tone
+12. Include a strong conclusion with call-to-action to the digital product
+13. Naturally incorporate the primary and secondary keywords
+14. Add placeholder markers for internal links using SPECIFIC, DESCRIPTIVE topic names like: [LINK: API design best practices], [LINK: debugging techniques], [LINK: microservices architecture] - NOT generic terms like "related topic"
+15. Focus on overview and key concepts - detailed implementation will be in the digital product
+16. Include a clear call-to-action: "Get the complete guide with templates and checklists in our digital product"
+17. Add a unique insight or perspective that differentiates this from similar content
 
 Return as JSON with these fields:
 - title
 - content (HTML formatted)
 - meta_description (150-160 characters)
-- headings (dict with h2 and h3 arrays)"""
+- headings (dict with h2 and h3 arrays)
+- key_statistics (array of statistics/data points used)
+- examples (array of real-world examples mentioned)"""
                 }
             ],
             response_format={"type": "json_object"}

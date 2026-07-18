@@ -109,15 +109,21 @@ Keywords: {', '.join(blog_post.keywords)}
             alt_text = prompt.replace('"', "'").replace('\n', ' ')[:100]
             title_text = f"Image {i+1}: {alt_text[:50]}"
             
-            # Use placeholder image URL (Blogger doesn't support local file uploads via API)
-            # Using a reliable placeholder service
-            image_url = f"https://via.placeholder.com/1024x1024/4A90E2/FFFFFF?text={alt_text[:20].replace(' ', '+')}"
-            
-            # If we have actual image paths, try to use them (but this won't work in Blogger)
+            # Check if we have Cloudinary URLs (https://res.cloudinary.com/...)
+            image_url = None
             if image_paths and i < len(image_paths):
-                # For now, we'll use placeholder since Blogger API doesn't support image uploads
-                # In production, you'd need to upload to a cloud service first
-                logger.warning(f"Note: Blogger API doesn't support direct image uploads. Using placeholder URL.")
+                path = image_paths[i]
+                if isinstance(path, str) and path.startswith('https://res.cloudinary.com/'):
+                    image_url = path
+                    logger.info(f"Using Cloudinary URL for image {i+1}")
+                elif isinstance(path, str) and path.startswith('http'):
+                    image_url = path
+                    logger.info(f"Using external URL for image {i+1}")
+            
+            # Fallback to placeholder if no Cloudinary URL
+            if not image_url:
+                image_url = f"https://via.placeholder.com/1024x1024/4A90E2/FFFFFF?text={alt_text[:20].replace(' ', '+')}"
+                logger.warning(f"No Cloudinary URL available for image {i+1}, using placeholder")
             
             # Look for image markers
             marker_pattern = r'\[IMAGE:.*?\]'

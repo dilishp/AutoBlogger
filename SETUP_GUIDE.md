@@ -182,7 +182,43 @@ Run with images:
 python blog_agent.py --mode full --num-topics 1
 ```
 
-### Option B: Use Stability AI
+### Option B: Use Cloudinary for Image Hosting
+
+Since Blogger API doesn't support direct image uploads, you can use Cloudinary to host your AI-generated images:
+
+1. **Create a Cloudinary Account**
+   - Sign up at [cloudinary.com](https://cloudinary.com)
+   - Get your free account (includes generous free tier)
+
+2. **Get Cloudinary Credentials**
+   - Go to Dashboard → Settings → API Security
+   - Copy your Cloud Name, API Key, and API Secret
+
+3. **Configure Environment Variables**
+   Add to your `.env` file:
+   ```bash
+   CLOUDINARY_CLOUD_NAME=your_cloud_name
+   CLOUDINARY_API_KEY=your_api_key
+   CLOUDINARY_API_SECRET=your_api_secret
+   ```
+
+4. **Create Upload Preset (Optional)**
+   - Go to Settings → Upload → Upload Presets
+   - Create an unsigned upload preset for easier uploads
+   - Or use signed uploads (default, more secure)
+
+**Workflow:**
+```
+OpenAI Images API → Save locally → Upload to Cloudinary → Get secure URL → Insert into Blogger HTML
+```
+
+The agent will automatically:
+- Generate images using DALL-E
+- Upload them to Cloudinary
+- Use the Cloudinary URLs in your blog posts
+- Fall back to placeholders if Cloudinary is not configured
+
+### Option C: Use Stability AI
 
 1. Get a Stability AI API key from [Stability AI](https://platform.stability.ai/)
 2. Add to `.env`:

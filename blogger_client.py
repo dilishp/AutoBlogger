@@ -38,8 +38,18 @@ class BloggerClient:
         # If credentials are invalid or missing, get new ones
         if not self.credentials or not self.credentials.valid:
             if self.credentials and self.credentials.expired and self.credentials.refresh_token:
-                self.credentials.refresh(Request())
-            else:
+                try:
+                    self.credentials.refresh(Request())
+                except Exception as e:
+                    logger.warning(f"Token refresh failed: {e}")
+                    logger.info("Deleting expired token and re-authenticating...")
+                    # Delete expired token file
+                    if token_path.exists():
+                        token_path.unlink()
+                    self.credentials = None
+            
+            # If still no valid credentials, perform full authentication
+            if not self.credentials or not self.credentials.valid:
                 if not credentials_path.exists():
                     raise FileNotFoundError(
                         "credentials.json not found. Please download it from Google Cloud Console "
