@@ -181,8 +181,8 @@ class BlogAIAgent:
                     
                     product_result = {
                         'success': True,
-                        'folder': saved_product['folder'],
-                        'files': saved_product['files'],
+                        'folder': saved_product.get('folder', ''),
+                        'files': saved_product.get('files', {}),
                         'gumroad_url': product_url if gumroad_result else None
                     }
                     post_result['steps'].append('digital_product_generation')

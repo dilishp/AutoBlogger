@@ -205,9 +205,36 @@ Keywords: {', '.join(blog_post.keywords)}
         return content
     
     def _apply_font_style(self, content: str, font_style: str) -> str:
-        """Apply consistent font style to content"""
+        """Apply consistent font style to content, preserving code block fonts"""
+        import re
+        
+        # Protect code blocks by temporarily replacing them with unique placeholders
+        code_blocks = []
+        
+        # Match <pre> tags (code blocks) - these are the main code blocks
+        def protect_code_blocks(match):
+            code_blocks.append(match.group(0))
+            return f"__CODE_BLOCK_{len(code_blocks)-1}__"
+        
+        # Protect <pre> tags and their content (multiline)
+        content = re.sub(r'<pre[^>]*>.*?</pre>', protect_code_blocks, content, flags=re.DOTALL)
+        
+        # Protect <code> tags that are not inside <pre> tags
+        # First, we need to handle code tags that might be inline
+        content = re.sub(r'<code[^>]*>.*?</code>', protect_code_blocks, content, flags=re.DOTALL)
+        
+        # Remove any existing font-family styles from content to ensure consistency
+        # But only from non-code content (code blocks are already protected)
+        content = re.sub(r'font-family\s*:\s*[^;]+;?', '', content)
+        content = re.sub(r'font-family\s*=\s*["\'][^"\']+["\']', '', content)
+        
         # Wrap the entire content in a div with consistent font
         font_div = f'<div style="font-family:{font_style};line-height:1.6;">{content}</div>'
+        
+        # Restore code blocks in reverse order to handle nested replacements correctly
+        for i in range(len(code_blocks) - 1, -1, -1):
+            font_div = font_div.replace(f"__CODE_BLOCK_{i}__", code_blocks[i])
+        
         return font_div
     
     def _update_search_description(self, post_id: str, description: str):

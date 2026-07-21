@@ -3,6 +3,7 @@ Gumroad API client for creating and managing digital products
 """
 import logging
 import os
+import json
 import requests
 from typing import Dict, Optional, List
 from pathlib import Path
@@ -42,6 +43,16 @@ class GumroadClient:
             logger.warning(f"Price too low (${price}), setting to minimum $0.99")
             price = 0.99
         
+        # Validate and sanitize tags (max 20 characters per tag)
+        if tags:
+            validated_tags = []
+            for tag in tags:
+                if len(tag) > 20:
+                    logger.warning(f"Tag too long ({len(tag)} chars), truncating to 20: {tag}")
+                    tag = tag[:20]
+                validated_tags.append(tag)
+            tags = validated_tags
+        
         # Log final price being sent
         logger.info(f"Final price after validation: ${price} (type: {type(price).__name__})")
         
@@ -57,10 +68,15 @@ class GumroadClient:
                 data = {
                     'name': name,
                     'description': description,
-                    'price': float(price),  # Ensure price is float
+                    'price': int(price * 100),  # Gumroad expects price in cents (e.g., 1499 for $14.99)
                     'published': True,
                     'require_shipping': False
                 }
+                
+                # Log the exact data being sent for debugging
+                logger.info(f"Sending data to Gumroad: {json.dumps(data, indent=2)}")
+                logger.info(f"Original price: ${price}")
+                logger.info(f"Price in cents: {int(price * 100)}")
                 
                 if tags:
                     data['tags'] = tags

@@ -32,6 +32,7 @@ class DigitalProductGenerator:
             'content': self._generate_comprehensive_content(blog_title, blog_content, blog_niche),
             'checklist': self._generate_checklist(blog_title, blog_content),
             'templates': self._generate_templates(blog_title, blog_content),
+            'tools': self._generate_functional_tools(blog_title, blog_content, blog_niche),
             'pricing': self._suggest_pricing(blog_niche, topic_demand),
             'marketing_copy': self._generate_marketing_copy(blog_title, blog_content),
             'demand_level': topic_demand,
@@ -56,46 +57,55 @@ class DigitalProductGenerator:
         score = 0
         max_score = 100
         
-        # Content length check (30 points)
+        # Content length check (20 points)
         content_length = len(product_data.get('content', ''))
         if content_length > 4000:
-            score += 30
-        elif content_length > 3000:
             score += 20
+        elif content_length > 3000:
+            score += 15
         elif content_length > 2000:
             score += 10
         
-        # Checklist quality (20 points)
-        checklist = product_data.get('checklist', [])
-        if len(checklist) >= 15:
+        # Functional tools quality (30 points) - NEW PRIORITY
+        tools = product_data.get('tools', [])
+        if len(tools) >= 3:
+            score += 30
+        elif len(tools) >= 2:
             score += 20
-        elif len(checklist) >= 10:
-            score += 15
-        elif len(checklist) >= 5:
+        elif len(tools) >= 1:
             score += 10
         
-        # Templates quality (25 points)
+        # Checklist quality (15 points)
+        checklist = product_data.get('checklist', [])
+        if len(checklist) >= 15:
+            score += 15
+        elif len(checklist) >= 10:
+            score += 10
+        elif len(checklist) >= 5:
+            score += 5
+        
+        # Templates quality (20 points)
         templates = product_data.get('templates', [])
         if len(templates) >= 5:
-            score += 25
+            score += 20
         elif len(templates) >= 3:
             score += 15
         elif len(templates) >= 1:
             score += 5
         
-        # Description quality (15 points)
+        # Description quality (10 points)
         description = product_data.get('description', '')
         if len(description) > 200:
-            score += 15
-        elif len(description) > 100:
             score += 10
+        elif len(description) > 100:
+            score += 5
         
-        # Marketing copy quality (10 points)
+        # Marketing copy quality (5 points)
         marketing = product_data.get('marketing_copy', '')
         if len(marketing) > 150:
-            score += 10
-        elif len(marketing) > 100:
             score += 5
+        elif len(marketing) > 100:
+            score += 3
         
         return min(score, max_score)
     
@@ -156,7 +166,7 @@ class DigitalProductGenerator:
                     },
                     {
                         "role": "user",
-                        "content": f"Create a compelling Gumroad product description for a digital product based on:\n\nBlog Title: {blog_title}\nBlog Content: {blog_content[:500]}...\n\nThe description should:\n- Hook the reader immediately\n- Highlight specific benefits and outcomes\n- Include what's included in the product\n- Create urgency and desire\n- Be 200-300 words"
+                        "content": f"Create a compelling Gumroad product description for a digital product based on:\n\nBlog Title: {blog_title}\nBlog Content: {blog_content[:500]}...\n\nThe product includes:\n- Comprehensive guide and documentation\n- Functional tools, scripts, and applications\n- Ready-to-use templates and code\n- Step-by-step implementation guides\n- Troubleshooting and optimization tips\n\nThe description should:\n- Hook the reader immediately\n- Highlight the functional tools and their value\n- Emphasize time savings and problem-solving capabilities\n- Mention these are NOT just tutorials but working tools\n- Create urgency and desire\n- Be 200-300 words"
                     }
                 ]
             )
@@ -357,6 +367,106 @@ class DigitalProductGenerator:
         logger.info(f"Suggested pricing for {blog_niche} ({topic_demand} demand): ${final_price}")
         return final_price
     
+    def _generate_functional_tools(self, blog_title: str, blog_content: str, blog_niche: str) -> List[Dict]:
+        """Generate functional tools, plugins, or applications related to the topic"""
+        try:
+            response = self.client.chat.completions.create(
+                model=config.openai_model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": f"""You are an expert at creating functional, sellable digital tools, plugins, and applications for {blog_niche}. 
+
+CRITICAL REQUIREMENTS:
+- Keep tools SMALL and FOCUSED (50-200 lines of code maximum)
+- Each tool should do ONE thing extremely well
+- Avoid complex architectures that introduce bugs
+- Use standard libraries when possible
+- Include error handling for common edge cases
+- Make code readable and maintainable
+- Test the logic mentally before writing
+
+Your goal is to create tools that:
+- Solve real, painful problems professionals face
+- Are not easily found for free online
+- Provide immediate value and time savings
+- Can be sold as premium products
+- Include complete, working code that users can deploy immediately
+- Are BUG-FREE and reliable
+
+Focus on creating tools that users would happily pay for because they save hours of work or solve complex problems."""
+                    },
+                    {
+                        "role": "user",
+                        "content": f"""Based on this blog topic: {blog_title}
+
+Blog content summary: {blog_content[:1000]}...
+
+Generate 3-5 functional tools, plugins, or applications that professionals in this niche would pay for. These should be practical, working tools that solve real problems.
+
+IMPORTANT: Keep each tool SMALL and FOCUSED (50-200 lines). Do not create large, complex applications. Focus on single-purpose tools that do one thing perfectly.
+
+For each tool, provide:
+1. **Tool Name**: Clear, descriptive name
+2. **Type**: Script, Plugin, Extension, CLI Tool, Web App, Library, etc.
+3. **Purpose**: What problem it solves and why it's valuable
+4. **Target Users**: Who would use this and why they'd pay for it
+5. **Language/Framework**: The tech stack (Python, JavaScript, etc.)
+6. **Complete Code**: Full, working code with comments (50-200 lines MAX)
+7. **Installation Instructions**: Step-by-step setup guide
+8. **Usage Examples**: How to use the tool with examples
+9. **Configuration**: Any config files or environment variables needed
+10. **Dependencies**: Required packages/libraries with versions (keep minimal)
+11. **Customization Guide**: How users can adapt it to their needs
+12. **Monetization Value**: Why this is worth paying for (time saved, complexity handled, etc.)
+
+Tool ideas to consider (keep them simple and focused):
+- Automation scripts for repetitive tasks
+- CLI tools for specific workflows
+- Simple configuration generators
+- Data validation/checking scripts
+- Log parsing/analysis tools
+- Simple monitoring/checking scripts
+- File conversion utilities
+- API wrapper scripts
+- Template generators
+- Simple testing utilities
+
+Return the tools in this JSON format:
+{{
+  "tools": [
+    {{
+      "name": "Tool Name",
+      "type": "Script/Plugin/App",
+      "purpose": "Description",
+      "target_users": "Who needs this",
+      "language": "Python/JavaScript/etc",
+      "code": "Complete working code here (50-200 lines)",
+      "installation": "Step-by-step instructions",
+      "usage": "Usage examples",
+      "configuration": "Config details",
+      "dependencies": ["package1==1.0.0"],
+      "customization": "How to customize",
+      "monetization_value": "Why this is worth paying for"
+    }}
+  ]
+}}"""
+                    }
+                ],
+                response_format={"type": "json_object"}
+            )
+            
+            content = response.choices[0].message.content.strip()
+            result = json.loads(content)
+            
+            tools = result.get('tools', [])
+            logger.info(f"Generated {len(tools)} functional tools")
+            return tools
+            
+        except Exception as e:
+            logger.error(f"Error generating functional tools: {e}")
+            return []
+    
     def _generate_marketing_copy(self, blog_title: str, blog_content: str) -> str:
         """Generate marketing copy for promoting the product"""
         try:
@@ -417,6 +527,45 @@ class DigitalProductGenerator:
             json.dump(product_data['templates'], f, indent=2)
         saved_files['templates'] = str(templates_file)
         
+        # Save functional tools as individual files
+        tools_folder = product_folder / "tools"
+        tools_folder.mkdir(parents=True, exist_ok=True)
+        saved_tools = []
+        
+        for i, tool in enumerate(product_data.get('tools', [])):
+            tool_name = "".join(c for c in tool.get('name', f'tool_{i}') if c.isalnum() or c in (' ', '-', '_')).strip()
+            tool_name = tool_name.replace(' ', '_').lower()
+            
+            # Save tool code
+            tool_file = tools_folder / f"{tool_name}.{self._get_extension(tool.get('language', 'python'))}"
+            with open(tool_file, 'w', encoding='utf-8') as f:
+                f.write(tool.get('code', ''))
+            saved_tools.append(str(tool_file))
+            
+            # Save tool documentation
+            tool_doc = tools_folder / f"{tool_name}_README.md"
+            with open(tool_doc, 'w', encoding='utf-8') as f:
+                f.write(f"# {tool.get('name', 'Tool')}\n\n")
+                f.write(f"**Type:** {tool.get('type', 'Script')}\n\n")
+                f.write(f"**Purpose:** {tool.get('purpose', '')}\n\n")
+                f.write(f"**Target Users:** {tool.get('target_users', '')}\n\n")
+                f.write(f"**Language/Framework:** {tool.get('language', '')}\n\n")
+                f.write(f"**Monetization Value:** {tool.get('monetization_value', '')}\n\n")
+                f.write("## Installation\n\n")
+                f.write(tool.get('installation', '') + "\n\n")
+                f.write("## Usage\n\n")
+                f.write(tool.get('usage', '') + "\n\n")
+                f.write("## Configuration\n\n")
+                f.write(tool.get('configuration', '') + "\n\n")
+                f.write("## Dependencies\n\n")
+                for dep in tool.get('dependencies', []):
+                    f.write(f"- {dep}\n")
+                f.write("\n## Customization\n\n")
+                f.write(tool.get('customization', ''))
+            saved_tools.append(str(tool_doc))
+        
+        saved_files['tools'] = saved_tools
+        
         # Save marketing copy
         marketing_file = product_folder / "marketing_copy.txt"
         with open(marketing_file, 'w', encoding='utf-8') as f:
@@ -429,16 +578,45 @@ class DigitalProductGenerator:
             'title': product_data['title'],
             'description': product_data['description'],
             'pricing': product_data['pricing'],
-            'blog_title': blog_title,
-            'files': saved_files
+            'quality_score': product_data.get('quality_score', 0),
+            'demand_level': product_data.get('demand_level', 'medium'),
+            'niche': product_data.get('niche', ''),
+            'tools_count': len(product_data.get('tools', [])),
+            'templates_count': len(product_data.get('templates', [])),
+            'checklist_count': len(product_data.get('checklist', []))
         }
         with open(metadata_file, 'w', encoding='utf-8') as f:
             json.dump(metadata, f, indent=2)
         saved_files['metadata'] = str(metadata_file)
         
         logger.info(f"Saved product files to: {product_folder}")
-        return {
-            'folder': str(product_folder),
-            'files': saved_files,
-            'metadata': metadata
+        saved_files['folder'] = str(product_folder)
+        return saved_files
+    
+    def _get_extension(self, language: str) -> str:
+        """Get file extension based on programming language"""
+        extensions = {
+            'python': 'py',
+            'javascript': 'js',
+            'typescript': 'ts',
+            'java': 'java',
+            'go': 'go',
+            'rust': 'rs',
+            'ruby': 'rb',
+            'php': 'php',
+            'shell': 'sh',
+            'bash': 'sh',
+            'powershell': 'ps1',
+            'sql': 'sql',
+            'html': 'html',
+            'css': 'css',
+            'json': 'json',
+            'yaml': 'yaml',
+            'yml': 'yml',
+            'xml': 'xml',
+            'markdown': 'md',
+            'dockerfile': 'dockerfile',
+            'docker': 'dockerfile'
         }
+        language_lower = language.lower()
+        return extensions.get(language_lower, 'txt')

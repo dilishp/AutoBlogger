@@ -231,14 +231,8 @@ class InternalLinker:
             # Find the anchor text in content
             anchor_pattern = re.escape(link.anchor_text)
             
-            # Replace first occurrence with link (avoiding existing links)
-            # Use a simpler approach without variable-width look-behind
-            pattern = rf'({anchor_pattern})'
-            replacement = f'<a href="{link.target_url}" title="{link.target_title}">\\1</a>'
-            
             # Check if the pattern is already inside an <a> tag
-            # by looking for <a> tags before and after
-            def should_replace(match):
+            def is_inside_link(match):
                 start = match.start()
                 end = match.end()
                 # Look backwards for opening <a> tag
@@ -247,13 +241,15 @@ class InternalLinker:
                 after = modified_content[end:]
                 # If we're already inside a link, don't replace
                 if '<a' in before.rsplit('>', 1)[-1] or '</a>' in after.split('<', 1)[0]:
-                    return match.group(0)
-                return match.group(0).replace(match.group(1), f'<a href="{link.target_url}" title="{link.target_title}">{match.group(1)}</a>')
+                    return True
+                return False
             
             # Find all matches and replace the first one that's not already in a link
-            for match in re.finditer(pattern, modified_content):
-                if should_replace(match) != match.group(0):
-                    modified_content = modified_content[:match.start()] + should_replace(match) + modified_content[match.end():]
+            for match in re.finditer(anchor_pattern, modified_content):
+                if not is_inside_link(match):
+                    # Create the replacement link
+                    replacement = f'<a href="{link.target_url}" title="{link.target_title}">{match.group(0)}</a>'
+                    modified_content = modified_content[:match.start()] + replacement + modified_content[match.end():]
                     links_applied += 1
                     logger.info(f"Applied link: {link.anchor_text} -> {link.target_title}")
                     break
