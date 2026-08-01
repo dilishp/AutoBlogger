@@ -7,6 +7,9 @@ from pathlib import Path
 from blogger_client import BloggerClient
 from content_generator import BlogPost
 from config import config
+import re
+from html.parser import HTMLParser
+from html import unescape
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -87,6 +90,9 @@ class BloggerPublisher:
         
         # Add code block styling
         content = self._add_code_styling(content)
+        
+        # Validate and sanitize HTML content
+        content = self._validate_and_sanitize_html(content)
         
         # Add SEO meta tags (as HTML comments)
         seo_comment = f"""
@@ -185,6 +191,87 @@ Keywords: {', '.join(blog_post.keywords)}
             content,
             flags=re.DOTALL
         )
+        
+        return content
+    
+    def _validate_and_sanitize_html(self, content: str) -> str:
+        """Validate and sanitize HTML content to prevent raw HTML tags from appearing in compose view"""
+        logger.info("Validating and sanitizing HTML content...")
+        
+        # Fix specific malformed HTML patterns that appear as raw text
+        # This addresses the issue where HTML attributes appear without proper opening tags
+        
+        # Pattern 1: Fix broken <a> tags where opening tag is missing but attributes are present
+        # Matches: filename.html" style="...">text
+        # This is the pattern seen in the screenshot
+        content = re.sub(
+            r'(\S+\.html)"\s+style="color:#0066cc;text-decoration:none;">([a-zA-Z]+)(\s|$)',
+            r'<a href="\1" style="color:#0066cc;text-decoration:none;">\2</a>\3',
+            content
+        )
+        
+        # Pattern 2: Fix broken <a> tags with title attribute
+        # Matches: filename.html" title="...">text
+        content = re.sub(
+            r'(\S+\.html)"\s+title="[^"]*">([a-zA-Z\s]+)(\s|$|:)',
+            r'<a href="\1" title="\2">\2</a>\3',
+            content
+        )
+        
+        # Pattern 3: Fix cases where HTML entities are not properly decoded
+        content = unescape(content)
+        
+        # Pattern 4: Ensure all <a> tags are properly closed
+        # Count opening and closing <a> tags
+        open_tags = len(re.findall(r'<a\s', content, re.IGNORECASE))
+        close_tags = len(re.findall(r'</a>', content, re.IGNORECASE))
+        
+        if open_tags > close_tags:
+            # Add missing closing tags
+            missing = open_tags - close_tags
+            logger.warning(f"Found {missing} unclosed <a> tags, adding closing tags")
+            # Add closing tags at the end for any remaining unclosed tags
+            content += '</a>' * missing
+        
+        # Pattern 5: Remove orphaned closing tags (more closing than opening)
+        if close_tags > open_tags:
+            # Remove excess closing tags
+            excess = close_tags - open_tags
+            logger.warning(f"Found {excess} orphaned </a> tags, removing them")
+            content = re.sub(r'</a>', '', content, count=excess)
+        
+        # Validate: Check for common HTML syntax errors
+        errors = []
+        
+        # Check for unclosed tags (other than <a>)
+        tag_stack = []
+        tag_pattern = r'<(/?)(\w+)[^>]*>'
+        
+        for match in re.finditer(tag_pattern, content, re.IGNORECASE):
+            is_closing = match.group(1) == '/'
+            tag_name = match.group(2).lower()
+            
+            # Skip self-closing and void elements
+            if tag_name in ['img', 'br', 'hr', 'input', 'meta', 'link']:
+                continue
+                
+            if is_closing:
+                if tag_stack and tag_stack[-1] == tag_name:
+                    tag_stack.pop()
+                else:
+                    errors.append(f"Unexpected closing tag: </{tag_name}>")
+            else:
+                tag_stack.append(tag_name)
+        
+        if tag_stack:
+            errors.append(f"Unclosed tags: {tag_stack}")
+        
+        # Log validation results
+        if errors:
+            logger.warning(f"HTML validation found issues: {errors}")
+            logger.info("Content has been sanitized but may still have issues")
+        else:
+            logger.info("HTML validation passed - no issues detected")
         
         return content
     
