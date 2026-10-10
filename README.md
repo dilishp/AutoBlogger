@@ -8,7 +8,7 @@ An intelligent AI-powered agent for automated blog content creation, SEO optimiz
 - **Content Generation**: Creates SEO-optimized blog posts with proper structure and formatting (800-1200 words)
 - **Digital Products**: Automatically generates comprehensive digital products for each blog post
 - **Gumroad Integration**: Uploads and sells digital products via Gumroad marketplace
-- **Image Generation**: Generates custom images using DALL-E or Stability AI
+- **Image Generation**: Generates custom images using OpenAI
 - **Cloudinary Hosting**: Automatically uploads images to Cloudinary for reliable hosting
 - **Internal Linking**: Automatically builds internal links between related posts
 - **Social Media Posts**: Generates promotional posts for LinkedIn, Facebook, and Twitter
@@ -22,10 +22,13 @@ The agent consists of several specialized modules:
 - `blogger_client.py` - Blogger API integration for content management
 - `seo_researcher.py` - SEO topic research and competitor analysis
 - `content_generator.py` - AI-powered blog content generation
-- `image_generator.py` - Image generation using DALL-E/Stability AI
+- `image_generator.py` - Image generation using OpenAI
 - `cloudinary_uploader.py` - Cloudinary image hosting integration
 - `digital_product_generator.py` - Comprehensive digital product creation
-- `gumroad_client.py` - Gumroad API for product sales
+- `google_cloud_project.py` - Google Cloud Project integration
+- `openai_api.py` - OpenAI API integration
+- `cloudinary_account.py` - Cloudinary account integration
+- `gumroad_account.py` - Gumroad account integration
 - `internal_linker.py` - Internal linking and backlink analysis
 - `social_media_generator.py` - Social media post generation
 - `blogger_publisher.py` - Content preparation and Blogger publishing
@@ -38,7 +41,6 @@ The agent consists of several specialized modules:
 - Python 3.8 or higher
 - Google Cloud Project with Blogger API enabled
 - OpenAI API key
-- (Optional) Stability AI API key for image generation
 - (Optional) Cloudinary account for image hosting
 - (Optional) Gumroad account for digital product sales
 
@@ -286,7 +288,6 @@ Used for:
 
 ### Optional Integrations
 
-- **Stability AI**: Alternative image generation
 - **Semrush/Ahrefs**: Advanced SEO metrics (requires API keys)
 - **Social Media APIs**: Direct posting to platforms (requires API keys)
 

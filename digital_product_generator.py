@@ -131,7 +131,8 @@ class DigitalProductGenerator:
         """Generate a compelling product title"""
         try:
             response = self.client.chat.completions.create(
-                model=config.openai_model,
+                model=config.openai_model_digital_product,
+                max_tokens=100,
                 messages=[
                     {
                         "role": "system",
@@ -158,7 +159,8 @@ class DigitalProductGenerator:
         """Generate a compelling product description for Gumroad"""
         try:
             response = self.client.chat.completions.create(
-                model=config.openai_model,
+                model=config.openai_model_digital_product,
+                max_tokens=500,
                 messages=[
                     {
                         "role": "system",
@@ -180,7 +182,8 @@ class DigitalProductGenerator:
         """Generate comprehensive content for the digital product"""
         try:
             response = self.client.chat.completions.create(
-                model=config.openai_model,
+                model=config.openai_model_digital_product,
+                max_tokens=config.max_tokens_digital_product,
                 messages=[
                     {
                         "role": "system",
@@ -216,7 +219,8 @@ class DigitalProductGenerator:
         """Generate a comprehensive, actionable checklist based on the content"""
         try:
             response = self.client.chat.completions.create(
-                model=config.openai_model,
+                model=config.openai_model_digital_product,
+                max_tokens=1500,
                 messages=[
                     {
                         "role": "system",
@@ -255,7 +259,8 @@ class DigitalProductGenerator:
         """Generate production-ready templates or code snippets based on the content"""
         try:
             response = self.client.chat.completions.create(
-                model=config.openai_model,
+                model=config.openai_model_digital_product,
+                max_tokens=3000,
                 messages=[
                     {
                         "role": "system",
@@ -371,7 +376,8 @@ class DigitalProductGenerator:
         """Generate functional tools, plugins, or applications related to the topic"""
         try:
             response = self.client.chat.completions.create(
-                model=config.openai_model,
+                model=config.openai_model_digital_product,
+                max_tokens=config.max_tokens_digital_product,
                 messages=[
                     {
                         "role": "system",
@@ -471,7 +477,8 @@ Return the tools in this JSON format:
         """Generate marketing copy for promoting the product"""
         try:
             response = self.client.chat.completions.create(
-                model=config.openai_model,
+                model=config.openai_model_digital_product,
+                max_tokens=300,
                 messages=[
                     {
                         "role": "system",

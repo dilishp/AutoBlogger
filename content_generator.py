@@ -77,7 +77,8 @@ class ContentGenerator:
             competitor_info = f"\nCompetitor Analysis:\n{competitor_analysis}"
         
         response = self.client.chat.completions.create(
-            model=config.openai_model,
+            model=config.openai_model_content,
+            max_tokens=config.max_tokens_content,
             messages=[
                 {
                     "role": "system",
@@ -175,7 +176,8 @@ Return as JSON with these fields:
             })
         
         response = self.client.chat.completions.create(
-            model=config.openai_model,
+            model=config.openai_model_content,
+            max_tokens=1000,
             messages=[
                 {
                     "role": "system",
@@ -215,7 +217,8 @@ Return as JSON array with:
         logger.info("Generating image prompts...")
         
         response = self.client.chat.completions.create(
-            model=config.openai_model,
+            model=config.openai_model_content,
+            max_tokens=800,
             messages=[
                 {
                     "role": "system",
@@ -272,7 +275,8 @@ Return as JSON array of prompt strings."""
         logger.info("Optimizing content for SEO...")
         
         response = self.client.chat.completions.create(
-            model=config.openai_model,
+            model=config.openai_model_seo,
+            max_tokens=config.max_tokens_seo,
             messages=[
                 {
                     "role": "system",

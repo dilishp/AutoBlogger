@@ -1,0 +1,23 @@
+# CatchyBytes Developer Utility Product Ideas
+# Blog post topics extracted from product specifications
+
+[DONE] GitHub Actions Doctor: Analyze GitHub Actions workflow YAML files and identify inefficient, unnecessary, risky, or expensive CI/CD configurations
+Monorepo Doctor: Analyze a JavaScript/TypeScript monorepo and identify dependency, build, architecture, and CI performance problems
+AI Repository Constitution Generator: Analyze a software repository and automatically create high-quality instructions for AI coding assistants
+Environment Configuration Doctor: Analyze environment variables used by an application and find missing, unused, inconsistent, exposed, or undocumented configuration
+OpenAPI Contract Guardian: Compare two versions of an OpenAPI specification and detect breaking and potentially dangerous API changes
+Docker Build Doctor: Analyze Dockerfiles and Docker build configuration to identify slow builds, unnecessary layers, oversized contexts, security issues, and production image inefficiencies
+Dependency Upgrade Impact Analyzer: Analyze a proposed dependency upgrade and determine what parts of the project may be affected
+AI PR Context Builder: Convert a Git diff or pull request into a structured engineering context document that can be supplied to an AI coding agent
+PR Risk Analyzer: Analyze a Git diff and identify potentially risky changes before code review
+TypeScript Migration Scanner: Analyze a JavaScript repository and create an incremental TypeScript migration plan based on the actual project
+Dead Code & Unused Code Analyzer: Analyze a project and identify unused files, exports, functions, classes, dependencies, and configuration
+Codebase Complexity Reporter: Generate a practical health report for an existing software project
+API Client Generator & Validator: Generate strongly typed API clients and runtime validation schemas from OpenAPI specifications
+GitHub Actions Cost Optimizer: Analyze GitHub Actions workflows and estimate where CI execution time and runner usage are being wasted
+Package.json Doctor: Analyze package.json and related files to detect dependency, script, metadata, and configuration problems
+Git Repository Cleanup Tool: Analyze a Git repository and identify unnecessary files, accidentally committed artifacts, oversized files, secrets, generated files, and repository hygiene issues
+README & Developer Documentation Auditor: Analyze a repository README and supporting documentation for missing information and broken developer onboarding
+Configuration Drift Detector: Compare development, staging, production, Docker, CI, and local configuration to detect inconsistencies
+Release Readiness Doctor: Analyze a project before release and identify potential release blockers
+Developer Project Health Dashboard: A broader utility that combines multiple repository diagnostics into one dashboard

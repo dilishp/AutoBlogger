@@ -15,7 +15,22 @@ class Config(BaseModel):
     
     # OpenAI Configuration
     openai_api_key: str = Field(default_factory=lambda: os.getenv("OPENAI_API_KEY", ""))
-    openai_model: str = Field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4-turbo-preview"))
+    
+    # Model Configuration - Different models for different workflows
+    openai_model: str = Field(default_factory=lambda: os.getenv("OPENAI_MODEL", "gpt-4o"))
+    openai_model_content: str = Field(default_factory=lambda: os.getenv("OPENAI_MODEL_CONTENT", "gpt-4o"))
+    openai_model_digital_product: str = Field(default_factory=lambda: os.getenv("OPENAI_MODEL_DIGITAL_PRODUCT", "gpt-4o"))
+    openai_model_seo: str = Field(default_factory=lambda: os.getenv("OPENAI_MODEL_SEO", "gpt-4o"))
+    openai_model_social: str = Field(default_factory=lambda: os.getenv("OPENAI_MODEL_SOCIAL", "gpt-4o"))
+    
+    # Token Configuration - Optimal tokens for different workflows
+    max_tokens_content: int = Field(default_factory=lambda: int(os.getenv("MAX_TOKENS_CONTENT", "2000")))
+    max_tokens_digital_product: int = Field(default_factory=lambda: int(os.getenv("MAX_TOKENS_DIGITAL_PRODUCT", "4000")))
+    max_tokens_seo: int = Field(default_factory=lambda: int(os.getenv("MAX_TOKENS_SEO", "1500")))
+    max_tokens_social: int = Field(default_factory=lambda: int(os.getenv("MAX_TOKENS_SOCIAL", "1000")))
+    
+    # Topic file configuration
+    topics_file_path: str = Field(default_factory=lambda: os.getenv("TOPICS_FILE_PATH", "data/topics.txt"))
     
     # Blogger Configuration
     blogger_api_key: str = Field(default_factory=lambda: os.getenv("BLOGGER_API_KEY", ""))
@@ -36,9 +51,6 @@ class Config(BaseModel):
     twitter_access_token: Optional[str] = Field(default_factory=lambda: os.getenv("TWITTER_ACCESS_TOKEN"))
     twitter_access_secret: Optional[str] = Field(default_factory=lambda: os.getenv("TWITTER_ACCESS_SECRET"))
     facebook_page_access_token: Optional[str] = Field(default_factory=lambda: os.getenv("FACEBOOK_PAGE_ACCESS_TOKEN"))
-    
-    # Image Generation
-    stability_ai_key: Optional[str] = Field(default_factory=lambda: os.getenv("STABILITY_AI_KEY"))
     
     # Blog Configuration
     blog_domain: str = Field(default_factory=lambda: os.getenv("BLOG_DOMAIN", ""))

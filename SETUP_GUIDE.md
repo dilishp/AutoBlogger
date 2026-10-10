@@ -2,6 +2,54 @@
 
 This guide will walk you through setting up the Blog AI Agent for your Blogger blog at simplifyyourday.blogspot.com.
 
+## Quick Reference: Script Run Variants
+
+### Blog AI Agent (`blog_agent.py`)
+
+```bash
+# Full workflow with automatic topic discovery
+python blog_agent.py --mode full --num-topics 1
+
+# Full workflow with topics file
+python blog_agent.py --mode full --topics-file topics.txt --num-topics 3
+
+# Full workflow with image generation
+python blog_agent.py --mode full --num-topics 1 --youtube-video
+
+# Full workflow without images (faster)
+python blog_agent.py --mode full --num-topics 1 --no-images
+
+# Full workflow with immediate publishing
+python blog_agent.py --mode full --num-topics 1 --publish
+
+# SEO research only (no content creation)
+python blog_agent.py --mode research --num-topics 10
+
+# Create content from specific topic
+python blog_agent.py --mode topic --topic "Your topic here"
+
+# Generate social media for existing post
+python blog_agent.py --mode social --url https://your-blog.com/post-id
+
+# Update internal links for existing post
+python blog_agent.py --mode links --url https://your-blog.com/post-id
+
+# Generate YouTube video only (from existing post)
+python blog_agent.py --mode youtube-only --url https://your-blog.com/post-id
+```
+
+**Available Arguments:**
+- `--mode`: Operation mode (full, research, topic, social, links, youtube-only)
+- `--topic`: Specific topic to create content for (required for topic mode)
+- `--url`: Post URL for social media, link updates, or YouTube video (required for social, links, youtube-only modes)
+- `--num-topics`: Number of topics to process (default: 1)
+- `--no-images`: Skip image generation (faster execution)
+- `--youtube-video`: Generate YouTube video along with blog post
+- `--publish`: Publish immediately instead of as draft
+- `--topics-file`: Path to text file containing topics (one per line)
+
+---
+
 ## Step 1: Google Cloud Console Setup
 
 ### 1.1 Create/Select Google Cloud Project
@@ -86,6 +134,23 @@ OPENAI_MODEL=gpt-4-turbo-preview
 OPENAI_API_KEY=sk-your-actual-openai-key-here
 OPENAI_MODEL=gpt-4-turbo-preview
 
+# Model Configuration - Different models for different workflows
+# Use gpt-4-turbo-preview for best quality, or gpt-3.5-turbo for cost savings
+OPENAI_MODEL_CONTENT=gpt-4-turbo-preview
+OPENAI_MODEL_DIGITAL_PRODUCT=gpt-4-turbo-preview
+OPENAI_MODEL_SEO=gpt-4-turbo-preview
+OPENAI_MODEL_SOCIAL=gpt-4-turbo-preview
+
+# Token Configuration - Optimal tokens for different workflows
+# Adjust based on your needs and budget
+MAX_TOKENS_CONTENT=2000
+MAX_TOKENS_DIGITAL_PRODUCT=4000
+MAX_TOKENS_SEO=1500
+MAX_TOKENS_SOCIAL=1000
+
+# Topic file configuration
+TOPICS_FILE_PATH=topics.txt
+
 # Blogger API Configuration
 BLOGGER_API_KEY=your-blogger-api-key-here
 BLOGGER_BLOG_ID=1234567890123456789
@@ -98,6 +163,31 @@ GOOGLE_CLIENT_SECRET=your-client-secret-here
 BLOG_DOMAIN=simplifyyourday.blogspot.com
 BLOG_NICHE=productivity/lifestyle
 TARGET_AUDIENCE=general_professionals
+```
+
+### Model and Token Configuration
+
+The Blog AI Agent now supports different models and token limits for different workflows to optimize quality and cost:
+
+**Model Configuration:**
+- `OPENAI_MODEL_CONTENT`: Model used for blog content generation (default: gpt-4-turbo-preview)
+- `OPENAI_MODEL_DIGITAL_PRODUCT`: Model used for digital product generation (default: gpt-4-turbo-preview)
+- `OPENAI_MODEL_SEO`: Model used for SEO optimization (default: gpt-4-turbo-preview)
+- `OPENAI_MODEL_SOCIAL`: Model used for social media content (default: gpt-4-turbo-preview)
+
+**Token Configuration:**
+- `MAX_TOKENS_CONTENT`: Maximum tokens for blog content (default: 2000)
+- `MAX_TOKENS_DIGITAL_PRODUCT`: Maximum tokens for digital products (default: 4000)
+- `MAX_TOKENS_SEO`: Maximum tokens for SEO tasks (default: 1500)
+- `MAX_TOKENS_SOCIAL`: Maximum tokens for social media (default: 1000)
+
+**Cost Optimization:**
+For cost savings, you can use `gpt-3.5-turbo` for less critical workflows:
+```env
+OPENAI_MODEL_CONTENT=gpt-3.5-turbo
+OPENAI_MODEL_SEO=gpt-3.5-turbo
+OPENAI_MODEL_SOCIAL=gpt-3.5-turbo
+OPENAI_MODEL_DIGITAL_PRODUCT=gpt-4-turbo-preview  # Keep high quality for products
 ```
 
 ## Step 5: Install Python Dependencies
@@ -131,6 +221,47 @@ TARGET_AUDIENCE=general_professionals
 
 ## Step 7: Test Full Workflow
 
+### Using Topics File (Recommended for Specific Topics)
+
+If you have specific topics you want to create content for, you can provide them in a text file:
+
+1. Create a `topics.txt` file with one topic per line:
+   ```bash
+   # Copy the example file
+   cp topics.txt.example topics.txt
+   
+   # Edit topics.txt with your desired topics
+   # Example:
+   Practical GitHub Actions caching strategies to speed CI and cut costs
+   Building bulletproof TypeScript API clients from OpenAPI with Zod
+   Cut CI time in half with incremental Turborepo for TypeScript monorepos
+   ```
+
+2. Run the agent with the topics file:
+   ```bash
+   python blog_agent.py --mode full --topics-file topics.txt --num-topics 3
+   ```
+
+3. **Topic Completion Tracking:**
+   - When a topic is successfully processed, it will be automatically marked with `[DONE]` in the topics.txt file
+   - Completed topics are skipped in subsequent runs
+   - You can manually mark topics as done by prefixing them with `[DONE]` or `[COMPLETED]`
+   - You can manually mark topics as pending by prefixing them with `[TODO]` or `[PENDING]`
+   - Comments (lines starting with `#`) are ignored
+   - Empty lines are ignored
+
+   Example topics.txt after processing:
+   ```
+   # Example topics file
+   [DONE] Practical GitHub Actions caching strategies to speed CI and cut costs
+   [DONE] Building bulletproof TypeScript API clients from OpenAPI with Zod
+   Cut CI time in half with incremental Turborepo for TypeScript monorepos
+   ```
+
+4. If the file is empty or doesn't exist, the agent will fall back to automatic topic discovery.
+
+### Using Automatic Topic Discovery
+
 1. Run a test with image generation disabled:
    ```bash
    python blog_agent.py --mode full --num-topics 1 --no-images
@@ -139,7 +270,7 @@ TARGET_AUDIENCE=general_professionals
 2. This will:
    - Fetch your existing posts
    - Analyze content
-   - Find a topic opportunity
+   - Find a topic opportunity automatically
    - Generate blog post content
    - Apply internal links
    - Publish as draft
@@ -213,20 +344,143 @@ OpenAI Images API → Save locally → Upload to Cloudinary → Get secure URL �
 ```
 
 The agent will automatically:
-- Generate images using DALL-E
+- Generate images using OpenAI
 - Upload them to Cloudinary
 - Use the Cloudinary URLs in your blog posts
 - Fall back to placeholders if Cloudinary is not configured
 
-### Option C: Use Stability AI
+## Step 10: Enable YouTube Video Generation (Optional)
 
-1. Get a Stability AI API key from [Stability AI](https://platform.stability.ai/)
-2. Add to `.env`:
-   ```env
-   STABILITY_AI_KEY=your-stability-ai-key-here
-   ```
+The Blog AI Agent can automatically generate YouTube videos from your blog posts with AI-generated visuals and synchronized narration.
 
-## Step 10: Schedule Regular Runs
+### 10.1 Install Video Processing Dependencies
+
+YouTube video generation requires additional Python packages:
+
+```bash
+pip install moviepy numpy pydub
+```
+
+**Note**: pydub may require additional system dependencies:
+- **Windows**: No additional dependencies needed
+- **Linux**: Install ffmpeg: `sudo apt-get install ffmpeg`
+- **Mac**: Install ffmpeg: `brew install ffmpeg`
+
+### 10.2 How YouTube Video Generation Works
+
+The system creates engaging YouTube videos through:
+
+1. **Script Generation**: Creates a story-driven script with visual descriptions for each scene
+2. **Scene Images**: Generates AI images for each scene using DALL-E
+3. **Per-Scene Audio**: Generates synchronized narration for each scene using OpenAI's TTS
+4. **Video Composition**: Stitches images and audio into a synchronized video
+5. **Text Overlays**: Adds key points as text overlays on each scene
+
+**Key Features**:
+- Story-like visual flow that viewers can easily follow
+- Perfect audio synchronization with individual scenes
+- Audio normalization and volume boosting
+- SEO-optimized titles, descriptions, and tags
+- Configurable video duration (default 60 seconds)
+
+### 10.3 Generate YouTube Videos
+
+Run the agent with the `--youtube-video` flag:
+
+```bash
+# Generate blog post with YouTube video
+python blog_agent.py --mode full --num-topics 1 --youtube-video
+
+# Generate from specific topic with video
+python blog_agent.py --mode topic --topic "Your topic here" --youtube-video
+
+# Generate video without images (faster, uses placeholders)
+python blog_agent.py --mode full --num-topics 1 --youtube-video --no-images
+```
+
+### 10.4 Video Output
+
+Videos are saved to: `output/videos/`
+
+Each video includes:
+- **Video file**: MP4 format with H.264 video codec and AAC audio codec
+- **Metadata**: Title, description, tags, duration, scene count
+- **Audio files**: Individual scene audio files in `output/audio/`
+- **Scene images**: Generated images in `output/images/`
+
+### 10.5 Customization
+
+Adjust video generation parameters in `youtube_video_generator.py`:
+
+- **Target duration**: Change `target_duration` parameter (default 60 seconds)
+- **Voice style**: Modify `voice` parameter in AudioGenerator (options: alloy, echo, fable, onyx, nova, shimmer)
+- **Audio boost**: Adjust `boost_db` in normalize_audio (default 3dB)
+- **Scene duration**: Modify `avg_scene_duration` in script generation (default 5 seconds)
+
+### 10.6 Troubleshooting Video Generation
+
+**Problem**: "No module named 'moviepy'" or similar import errors
+
+**Solution**:
+```bash
+pip install moviepy numpy pydub --upgrade
+```
+
+**Problem**: Audio normalization fails (pydub import error)
+
+**Solution**: This is optional - the system will skip normalization and continue with standard audio. To fix:
+- Install ffmpeg system dependency (see 10.1)
+- Or disable normalization by setting `normalize_audio=False` in the code
+
+**Problem**: Video generation takes too long
+
+**Solution**:
+- Reduce target duration (e.g., 30 seconds instead of 60)
+- Use fewer scenes by adjusting scene duration
+- Disable audio normalization if not critical
+
+**Problem**: Generated video has no audio
+
+**Solution**:
+- Check OpenAI API key has access to TTS API
+- Verify audio files are generated in `output/audio/`
+- Check logs for audio generation errors
+
+### 10.7 Generate YouTube Video Only (Skip Other Steps)
+
+If you already have a published blog post and want to generate a YouTube video without running the full workflow, use the `youtube-only` mode:
+
+```bash
+python blog_agent.py --mode youtube-only --url "https://your-blog-post-url"
+```
+
+**What this mode does:**
+- Fetches the existing blog post from the provided URL
+- Generates a YouTube video from the blog content
+- Skips all other steps (content generation, SEO research, image generation, social media, etc.)
+- Saves the video to `output/videos/`
+
+**Example:**
+```bash
+python blog_agent.py --mode youtube-only --url "https://simplifyyourday.blogspot.com/2024/01/your-post-id"
+```
+
+**Use cases:**
+- Generate videos for existing posts that were created without videos
+- Re-generate videos with updated settings
+- Create videos for manually written posts
+- Test video generation without affecting blog content
+
+### 10.8 Best Practices for YouTube Videos
+
+1. **Start Short**: Begin with 30-second videos to test the workflow
+2. **Review Scripts**: The AI generates scripts - review them for your niche
+3. **Customize Voice**: Try different voice options (alloy, echo, fable, onyx, nova, shimmer)
+4. **Monitor Costs**: Video generation uses OpenAI API for both images and audio
+5. **Quality Check**: Review generated videos before uploading to YouTube
+6. **SEO Optimization**: Use the generated titles, descriptions, and tags for YouTube SEO
+
+## Step 11: Schedule Regular Runs
 
 ### Windows Task Scheduler
 

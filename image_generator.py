@@ -18,29 +18,20 @@ class ImageGenerator:
     
     def __init__(self):
         self.client = OpenAI(api_key=config.openai_api_key)
-        self.stability_key = config.stability_ai_key
         self.output_dir = config.output_dir / "images"
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.cloudinary_uploader = CloudinaryUploader()
     
     def generate_images(self, prompts: List[str], 
-                       use_dalle: bool = True,
-                       use_stability: bool = False,
                        upload_to_cloudinary: bool = True) -> List[str]:
-        """Generate images from prompts and optionally upload to Cloudinary"""
+        """Generate images from prompts using OpenAI and optionally upload to Cloudinary"""
         logger.info(f"Generating {len(prompts)} images...")
         
         image_paths = []
         
         for i, prompt in enumerate(prompts):
             try:
-                if use_dalle:
-                    image_path = self._generate_with_dalle(prompt, i)
-                elif use_stability and self.stability_key:
-                    image_path = self._generate_with_stability(prompt, i)
-                else:
-                    logger.warning("No image generation service configured")
-                    continue
+                image_path = self._generate_with_dalle(prompt, i)
                 
                 if image_path:
                     image_paths.append(image_path)
@@ -149,43 +140,6 @@ class ImageGenerator:
                 logger.warning("Falling back to placeholder images")
             return None
     
-    def _generate_with_stability(self, prompt: str, index: int) -> Optional[str]:
-        """Generate image using Stability AI"""
-        try:
-            url = "https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image"
-            
-            headers = {
-                "Authorization": f"Bearer {self.stability_key}",
-                "Content-Type": "application/json",
-                "Accept": "application/json"
-            }
-            
-            body = {
-                "text_prompts": [{"text": prompt}],
-                "cfg_scale": 7,
-                "height": 1024,
-                "width": 1024,
-                "steps": 30,
-                "samples": 1
-            }
-            
-            response = requests.post(url, headers=headers, json=body)
-            response.raise_for_status()
-            
-            data = response.json()
-            image_data = data["artifacts"][0]["base64"]
-            
-            # Save image
-            import base64
-            image_path = self.output_dir / f"image_{index}.png"
-            with open(image_path, 'wb') as f:
-                f.write(base64.b64decode(image_data))
-            
-            return str(image_path)
-        
-        except Exception as e:
-            logger.error(f"Stability AI generation failed: {e}")
-            return None
     
     def select_stock_images(self, topic: str, num_images: int = 3) -> List[str]:
         """Search for and select stock images (placeholder for integration with stock APIs)"""

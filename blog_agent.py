@@ -15,6 +15,7 @@ from social_media_generator import SocialMediaGenerator
 from blogger_publisher import BloggerPublisher
 from digital_product_generator import DigitalProductGenerator
 from gumroad_client import GumroadClient
+from youtube_video_generator import YouTubeVideoGenerator
 from config import config
 
 logging.basicConfig(level=logging.INFO)
@@ -37,6 +38,7 @@ class BlogAIAgent:
         self.blogger_publisher = BloggerPublisher()
         self.digital_product_generator = DigitalProductGenerator()
         self.gumroad_client = GumroadClient()
+        self.youtube_video_generator = YouTubeVideoGenerator()
         
         # Cache for blog content
         self.existing_posts = []
@@ -46,7 +48,9 @@ class BlogAIAgent:
     
     def run_full_workflow(self, num_topics: int = 1, 
                          generate_images: bool = True,
-                         publish_immediately: bool = False) -> Dict:
+                         generate_youtube_video: bool = False,
+                         publish_immediately: bool = False,
+                         topics_file: Optional[str] = None) -> Dict:
         """Run the complete blog creation workflow"""
         logger.info("=" * 60)
         logger.info("Starting Full Blog Creation Workflow")
@@ -67,14 +71,18 @@ class BlogAIAgent:
             workflow_result['steps_completed'].append('content_fetch')
             logger.info(f"Fetched {len(self.existing_posts)} existing posts")
             
-            # Step 2: Analyze content and find opportunities
-            logger.info("Step 2: Analyzing content and finding opportunities...")
-            content_analysis = self.seo_researcher.analyze_existing_content(self.existing_posts)
-            opportunities = self.seo_researcher.discover_topic_opportunities(
-                content_analysis, 
-                num_opportunities=num_topics
-            )
-            workflow_result['steps_completed'].append('seo_research')
+            # Step 2: Get topics (from file or discover)
+            if topics_file:
+                logger.info(f"Step 2: Loading topics from file: {topics_file}")
+                opportunities = self._load_topics_from_file(topics_file)
+                if not opportunities:
+                    logger.warning("No topics found in file, falling back to discovery")
+                    opportunities = self._discover_topics(num_topics)
+            else:
+                logger.info("Step 2: Analyzing content and finding opportunities...")
+                opportunities = self._discover_topics(num_topics)
+            
+            workflow_result['steps_completed'].append('topic_selection')
             logger.info(f"Found {len(opportunities)} topic opportunities")
             
             # Process each opportunity
@@ -84,10 +92,15 @@ class BlogAIAgent:
                 post_result = self._process_single_opportunity(
                     opportunity,
                     generate_images,
+                    generate_youtube_video,
                     publish_immediately
                 )
                 
                 workflow_result['posts_created'].append(post_result)
+                
+                # Mark topic as done if it came from a file and was successful
+                if topics_file and post_result.get('success'):
+                    self._mark_topic_as_done(topics_file, opportunity.topic)
             
             workflow_result['end_time'] = datetime.now().isoformat()
             workflow_result['status'] = 'completed'
@@ -107,6 +120,7 @@ class BlogAIAgent:
     
     def _process_single_opportunity(self, opportunity: TopicOpportunity,
                                    generate_images: bool,
+                                   generate_youtube_video: bool,
                                    publish_immediately: bool) -> Dict:
         """Process a single topic opportunity"""
         post_result = {
@@ -199,8 +213,7 @@ class BlogAIAgent:
             if generate_images:
                 logger.info("  - Generating images...")
                 image_paths = self.image_generator.generate_images(
-                    blog_post.image_prompts,
-                    use_dalle=True
+                    blog_post.image_prompts
                 )
                 post_result['steps'].append('image_generation')
                 post_result['images'] = image_paths
@@ -263,7 +276,42 @@ class BlogAIAgent:
                 blog_post_url = publish_result.get('url', '')
                 post_result['url'] = blog_post_url
                 
-                # Step 8: Generate social media posts
+                # Step 8: Generate YouTube video
+                youtube_video_result = None
+                if generate_youtube_video:
+                    logger.info("  - Generating YouTube video...")
+                    try:
+                        # Generate video from blog post
+                        video_metadata = self.youtube_video_generator.generate_video(
+                            blog_title=blog_post.title,
+                            blog_content=blog_post.content,
+                            target_duration=60.0,  # 60 seconds default
+                            output_filename=f"{blog_post.title[:50].replace(' ', '_')}_video.mp4",
+                            add_audio=True,
+                            normalize_audio=True
+                        )
+                        
+                        youtube_video_result = {
+                            'success': True,
+                            'video_path': video_metadata['video_path'],
+                            'title': video_metadata['title'],
+                            'description': video_metadata['description'],
+                            'tags': video_metadata['tags'],
+                            'duration': video_metadata['duration'],
+                            'num_scenes': video_metadata['num_scenes']
+                        }
+                        post_result['steps'].append('youtube_video_generation')
+                        post_result['youtube_video'] = youtube_video_result
+                        logger.info(f"  ✓ YouTube video generated: {video_metadata['video_path']}")
+                        
+                    except Exception as e:
+                        logger.error(f"  ✗ YouTube video generation failed: {e}")
+                        youtube_video_result = {'success': False, 'error': str(e)}
+                        post_result['youtube_video'] = youtube_video_result
+                else:
+                    logger.info("  ℹ YouTube video generation disabled")
+                
+                # Step 9: Generate social media posts
                 logger.info("  - Generating social media posts...")
                 blog_post_dict = {
                     'title': blog_post.title,
@@ -325,6 +373,122 @@ class BlogAIAgent:
         
         return post_result
     
+    def _load_topics_from_file(self, topics_file: str) -> List:
+        """Load topics from a text file, skipping completed ones"""
+        from pathlib import Path
+        
+        file_path = Path(topics_file)
+        if not file_path.exists():
+            logger.error(f"Topics file not found: {topics_file}")
+            return []
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            # Parse topics, skipping completed ones and comments
+            topics = []
+            for line in lines:
+                stripped_line = line.strip()
+                
+                # Skip empty lines and comments
+                if not stripped_line or stripped_line.startswith('#'):
+                    continue
+                
+                # Skip completed topics (marked with [DONE] or [COMPLETED])
+                if stripped_line.startswith('[DONE]') or stripped_line.startswith('[COMPLETED]'):
+                    continue
+                
+                # Remove any existing [TODO] or [PENDING] markers
+                if stripped_line.startswith('[TODO]') or stripped_line.startswith('[PENDING]'):
+                    stripped_line = stripped_line.replace('[TODO]', '').replace('[PENDING]', '').strip()
+                
+                topics.append(stripped_line)
+            
+            if not topics:
+                logger.warning(f"No pending topics found in file: {topics_file}")
+                return []
+            
+            # Convert topics to opportunity objects
+            opportunities = []
+            for topic in topics:
+                from seo_researcher import TopicOpportunity
+                opportunity = TopicOpportunity(
+                    topic=topic,
+                    keywords=[],
+                    search_volume=50,
+                    difficulty=30,
+                    opportunity_score=70,
+                    trend="stable",
+                    suggested_title=topic,
+                    content_outline=[]
+                )
+                opportunities.append(opportunity)
+            
+            logger.info(f"Loaded {len(opportunities)} pending topics from file")
+            return opportunities
+            
+        except Exception as e:
+            logger.error(f"Error loading topics from file: {e}")
+            return []
+    
+    def _mark_topic_as_done(self, topics_file: str, topic: str):
+        """Mark a topic as completed in the topics file"""
+        from pathlib import Path
+        
+        file_path = Path(topics_file)
+        if not file_path.exists():
+            logger.warning(f"Topics file not found, cannot mark topic as done: {topics_file}")
+            return
+        
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                lines = f.readlines()
+            
+            # Find and mark the topic as done
+            updated_lines = []
+            topic_found = False
+            for line in lines:
+                stripped_line = line.strip()
+                
+                # Check if this line matches the topic (with or without markers)
+                topic_to_match = topic.strip()
+                line_to_match = stripped_line
+                
+                # Remove markers for comparison
+                for marker in ['[DONE]', '[COMPLETED]', '[TODO]', '[PENDING]']:
+                    line_to_match = line_to_match.replace(marker, '').strip()
+                
+                if line_to_match == topic_to_match and not stripped_line.startswith('[DONE]') and not stripped_line.startswith('[COMPLETED]'):
+                    # Mark as done
+                    updated_lines.append(f"[DONE] {stripped_line}\n")
+                    topic_found = True
+                    logger.info(f"Marked topic as done: {topic}")
+                else:
+                    updated_lines.append(line)
+            
+            if topic_found:
+                # Write back to file
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.writelines(updated_lines)
+            else:
+                logger.warning(f"Topic not found in file, cannot mark as done: {topic}")
+                
+        except Exception as e:
+            logger.error(f"Error marking topic as done: {e}")
+    
+    def _discover_topics(self, num_topics: int) -> List:
+        """Discover topics using SEO research"""
+        content_analysis = self.seo_researcher.analyze_existing_content(self.existing_posts)
+        opportunities = self.seo_researcher.discover_topic_opportunities(
+            content_analysis, 
+            num_opportunities=num_topics
+        )
+        workflow_result = {
+            'steps_completed': ['seo_research']
+        }
+        return opportunities
+    
     def research_only(self, num_opportunities: int = 10) -> Dict:
         """Run SEO research only without creating content"""
         logger.info("Running SEO research only...")
@@ -361,6 +525,7 @@ class BlogAIAgent:
     
     def create_from_topic(self, topic: str, 
                          generate_images: bool = True,
+                         generate_youtube_video: bool = False,
                          publish_immediately: bool = False) -> Dict:
         """Create a blog post from a specific topic"""
         logger.info(f"Creating blog post from topic: {topic}")
@@ -393,6 +558,7 @@ class BlogAIAgent:
         result = self._process_single_opportunity(
             opportunity,
             generate_images,
+            generate_youtube_video,
             publish_immediately
         )
         
@@ -454,11 +620,19 @@ class BlogAIAgent:
         """Generate social media posts for an existing blog post"""
         logger.info(f"Generating social media posts for: {post_url}")
         
-        # Extract post ID from URL
-        post_id = post_url.split('/')[-1]
+        # Fetch all posts to find the matching one by URL
+        logger.info("  - Fetching blog posts to find matching URL...")
+        all_posts = self.blogger_client.get_all_posts(fetch_bodies=True)
         
-        # Fetch the post
-        post = self.blogger_client.get_post(post_id)
+        # Find the post matching the URL
+        post = None
+        for p in all_posts:
+            if post_url in p.get('url', ''):
+                post = p
+                break
+        
+        if not post:
+            raise ValueError(f"Could not find post with URL: {post_url}")
         
         # Generate social media posts
         blog_post_dict = {
@@ -490,9 +664,17 @@ class BlogAIAgent:
         self.existing_posts = self.blogger_client.get_all_posts()
         self.content_index = self.internal_linker.build_content_index(self.existing_posts)
         
-        # Get the specific post
-        post_id = post_url.split('/')[-1]
-        post = self.blogger_client.get_post(post_id)
+        # Find the post matching the URL
+        post = None
+        post_id = None
+        for p in self.existing_posts:
+            if post_url in p.get('url', ''):
+                post = p
+                post_id = p.get('id')
+                break
+        
+        if not post:
+            raise ValueError(f"Could not find post with URL: {post_url}")
         
         # Find linking opportunities
         linking_opportunities = self.internal_linker.find_linking_opportunities(
@@ -523,6 +705,68 @@ class BlogAIAgent:
         
         return result
     
+    def generate_youtube_video_only(self, post_url: str) -> Dict:
+        """Generate YouTube video only from an existing blog post"""
+        logger.info(f"Generating YouTube video only for: {post_url}")
+        
+        video_result = {
+            'post_url': post_url,
+            'success': False,
+            'video_path': None,
+            'error': None
+        }
+        
+        try:
+            # Fetch all posts to find the matching one by URL
+            logger.info("  - Fetching blog posts to find matching URL...")
+            all_posts = self.blogger_client.get_all_posts(fetch_bodies=True)
+            
+            # Find the post matching the URL
+            post = None
+            post_id = None
+            for p in all_posts:
+                if post_url in p.get('url', ''):
+                    post = p
+                    post_id = p.get('id')
+                    break
+            
+            if not post:
+                raise ValueError(f"Could not find post with URL: {post_url}")
+            
+            blog_title = post.get('title', '')
+            blog_content = post.get('content', '')
+            
+            logger.info(f"  - Found post: {blog_title} (ID: {post_id})")
+            
+            # Generate YouTube video
+            logger.info("  - Generating YouTube video...")
+            video_metadata = self.youtube_video_generator.generate_video(
+                blog_title=blog_title,
+                blog_content=blog_content,
+                target_duration=60.0,  # 60 seconds default
+                output_filename=f"{blog_title[:50].replace(' ', '_')}_video.mp4",
+                add_audio=True,
+                normalize_audio=True
+            )
+            
+            video_result = {
+                'success': True,
+                'video_path': video_metadata['video_path'],
+                'title': video_metadata['title'],
+                'description': video_metadata['description'],
+                'tags': video_metadata['tags'],
+                'duration': video_metadata['duration'],
+                'num_scenes': video_metadata['num_scenes']
+            }
+            
+            logger.info(f"  ✓ YouTube video generated: {video_metadata['video_path']}")
+            
+        except Exception as e:
+            logger.error(f"  ✗ YouTube video generation failed: {e}")
+            video_result['error'] = str(e)
+        
+        return video_result
+    
     def get_workflow_report(self) -> Dict:
         """Generate a report of recent activity"""
         logger.info("Generating workflow report...")
@@ -551,13 +795,15 @@ def main():
     import argparse
     
     parser = argparse.ArgumentParser(description='Blog AI Agent')
-    parser.add_argument('--mode', choices=['full', 'research', 'topic', 'social', 'links'], 
+    parser.add_argument('--mode', choices=['full', 'research', 'topic', 'social', 'links', 'youtube-only'], 
                        default='full', help='Operation mode')
     parser.add_argument('--topic', type=str, help='Specific topic to create content for')
-    parser.add_argument('--url', type=str, help='Post URL for social media or link updates')
+    parser.add_argument('--url', type=str, help='Post URL for social media, link updates, or YouTube video generation')
     parser.add_argument('--num-topics', type=int, default=1, help='Number of topics to process')
     parser.add_argument('--no-images', action='store_true', help='Skip image generation')
+    parser.add_argument('--youtube-video', action='store_true', help='Generate YouTube video')
     parser.add_argument('--publish', action='store_true', help='Publish immediately (not as draft)')
+    parser.add_argument('--topics-file', type=str, help='Path to text file containing topics (one per line)')
     
     args = parser.parse_args()
     
@@ -569,7 +815,9 @@ def main():
         result = agent.run_full_workflow(
             num_topics=args.num_topics,
             generate_images=not args.no_images,
-            publish_immediately=args.publish
+            generate_youtube_video=args.youtube_video,
+            publish_immediately=args.publish,
+            topics_file=args.topics_file
         )
     elif args.mode == 'research':
         result = agent.research_only(num_opportunities=args.num_topics)
@@ -577,12 +825,15 @@ def main():
         result = agent.create_from_topic(
             args.topic,
             generate_images=not args.no_images,
+            generate_youtube_video=args.youtube_video,
             publish_immediately=args.publish
         )
     elif args.mode == 'social' and args.url:
         result = agent.generate_social_media_only(args.url)
     elif args.mode == 'links' and args.url:
         result = agent.update_internal_links(args.url)
+    elif args.mode == 'youtube-only' and args.url:
+        result = agent.generate_youtube_video_only(args.url)
     else:
         logger.error("Invalid arguments for the selected mode")
         return

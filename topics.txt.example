@@ -1,0 +1,16 @@
+# Example topics file
+# Add one topic per line
+# Empty lines and comments (lines starting with #) are ignored
+# Topics are automatically marked with [DONE] after successful processing
+# You can manually mark topics with:
+#   [DONE] or [COMPLETED] - to skip this topic
+#   [TODO] or [PENDING] - to mark as pending (optional)
+
+# Example topics for a technology blog:
+[TODO] Practical GitHub Actions caching strategies to speed CI and cut costs
+[TODO] Building bulletproof TypeScript API clients from OpenAPI with Zod
+[TODO] Cut CI time in half with incremental Turborepo for TypeScript monorepos
+[TODO] From chaos to type-safe: A practical incremental TypeScript migration plan
+[TODO] How to migrate a large JavaScript codebase to TypeScript incrementally
+
+# Add your own topics below:
