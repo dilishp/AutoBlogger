@@ -6,11 +6,11 @@
 #   [DONE] or [COMPLETED] - to skip this topic
 #   [TODO] or [PENDING] - to mark as pending (optional)
 
-# Example topics for a technology blog:
-[TODO] Practical GitHub Actions caching strategies to speed CI and cut costs
-[TODO] Building bulletproof TypeScript API clients from OpenAPI with Zod
-[TODO] Cut CI time in half with incremental Turborepo for TypeScript monorepos
-[TODO] From chaos to type-safe: A practical incremental TypeScript migration plan
-[TODO] How to migrate a large JavaScript codebase to TypeScript incrementally
+# Example topics for a programming/technical blog:
+[TODO] Understanding Recursion: From Basics to Advanced Patterns
+[TODO] Big O Notation Explained: How to Analyze Algorithm Efficiency
+[TODO] Design Patterns Every Developer Should Know: Singleton to Observer
+[TODO] Functional Programming vs Object-Oriented: When to Use Each
+[TODO] Understanding Closures in JavaScript: Practical Examples
 
 # Add your own topics below:

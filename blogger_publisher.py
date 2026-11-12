@@ -8,8 +8,7 @@ from blogger_client import BloggerClient
 from content_generator import BlogPost
 from config import config
 import re
-from html.parser import HTMLParser
-from html import unescape
+from bs4 import BeautifulSoup, Comment
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -94,235 +93,127 @@ class BloggerPublisher:
         # Validate and sanitize HTML content
         content = self._validate_and_sanitize_html(content)
         
-        # Add SEO meta tags (as HTML comments)
-        seo_comment = f"""
-<!-- 
-Meta Description: {blog_post.meta_description}
-Keywords: {', '.join(blog_post.keywords)}
--->
-"""
-        
-        content = seo_comment + content
-        
         return content
     
     def _insert_images_with_metadata(self, content: str, image_prompts: list, image_paths: list = None) -> str:
-        """Insert images with proper metadata (alt text, title) at strategic locations"""
-        import re
-        
+        """Replace image markers with safely escaped image nodes."""
+        soup = BeautifulSoup(content, 'html.parser')
+        markers = list(soup.find_all(string=re.compile(r'\[IMAGE:.*?\]')))
+        markers = [marker for marker in markers
+                   if marker.parent.name not in {'code', 'pre', 'script', 'style'}]
         for i, prompt in enumerate(image_prompts):
-            # Generate alt text from prompt
-            alt_text = prompt.replace('"', "'").replace('\n', ' ')[:100]
-            title_text = f"Image {i+1}: {alt_text[:50]}"
-            
-            # Check if we have Cloudinary URLs (https://res.cloudinary.com/...)
             image_url = None
             if image_paths and i < len(image_paths):
                 path = image_paths[i]
-                if isinstance(path, str) and path.startswith('https://res.cloudinary.com/'):
+                if isinstance(path, str) and path.startswith(('https://', 'http://')):
                     image_url = path
-                    logger.info(f"Using Cloudinary URL for image {i+1}")
-                elif isinstance(path, str) and path.startswith('http'):
-                    image_url = path
-                    logger.info(f"Using external URL for image {i+1}")
-            
-            # Fallback to placeholder if no Cloudinary URL
             if not image_url:
-                image_url = f"https://via.placeholder.com/1024x1024/4A90E2/FFFFFF?text={alt_text[:20].replace(' ', '+')}"
-                logger.warning(f"No Cloudinary URL available for image {i+1}, using placeholder")
-            
-            # Look for image markers
-            marker_pattern = r'\[IMAGE:.*?\]'
-            
-            if re.search(marker_pattern, content):
-                # Replace first marker with proper image HTML
-                image_html = f'<img src="{image_url}" alt="{alt_text}" title="{title_text}" class="blog-image" style="max-width:100%;height:auto;margin:20px 0;border-radius:8px;" />'
-                content = re.sub(marker_pattern, image_html, content, count=1)
-            else:
-                # Insert after first paragraph if no markers
-                first_para_end = content.find('</p>')
-                if first_para_end != -1:
-                    image_html = f'<img src="{image_url}" alt="{alt_text}" title="{title_text}" class="blog-image" style="max-width:100%;height:auto;margin:20px 0;border-radius:8px;" />'
-                    content = content[:first_para_end + 4] + image_html + content[first_para_end + 4:]
-        
-        return content
-    
+                from urllib.parse import quote_plus
+                image_url = 'https://via.placeholder.com/1024x1024/4A90E2/FFFFFF?text=' + quote_plus(str(prompt)[:40])
+                logger.warning(f"No hosted image URL available for image {i + 1}; using placeholder")
+
+            alt_text = re.sub(r'\s+', ' ', str(prompt)).strip()[:160]
+            image = soup.new_tag('img', src=image_url, alt=alt_text)
+            image['title'] = alt_text[:80]
+            image['class'] = ['blog-image']
+            image['style'] = 'max-width:100%;height:auto;margin:20px 0;border-radius:8px'
+            if i < len(markers):
+                marker = markers[i]
+                paragraph = marker.parent if marker.parent.name == 'p' else None
+                marker.replace_with(image)
+                if paragraph and not paragraph.get_text(strip=True) and not paragraph.find('img'):
+                    paragraph.decompose()
+            elif i == 0:
+                first_paragraph = soup.find('p')
+                if first_paragraph:
+                    first_paragraph.insert_after(image)
+        return str(soup)
+
     def _add_code_styling(self, content: str) -> str:
-        """Add proper styling for code blocks"""
-        import re
-        
-        # First, convert markdown-style code blocks to HTML
-        # Handle ```code``` blocks (multi-line)
-        content = re.sub(
-            r'```(\w+)?\n(.*?)```',
-            r'<pre><code class="\1">\2</code></pre>',
-            content,
-            flags=re.DOTALL
-        )
-        
-        # Handle `code` (inline)
-        content = re.sub(
-            r'`([^`]+)`',
-            r'<code>\1</code>',
-            content
-        )
-        
-        # Wrap code blocks in pre tags with styling
-        # Look for existing code blocks and enhance them
-        content = re.sub(
-            r'<code>(.*?)</code>',
-            r'<code style="background-color:#f4f4f4;padding:2px 6px;border-radius:3px;font-family:Consolas,Monaco,monospace;font-size:0.9em;color:#d63384;">\1</code>',
-            content,
-            flags=re.DOTALL
-        )
-        
-        # Handle multi-line code blocks (pre tags)
-        content = re.sub(
-            r'<pre><code class="([^"]*)">(.*?)</code></pre>',
-            r'<pre style="background-color:#2d2d2d;color:#f8f8f2;padding:15px;border-radius:5px;overflow-x:auto;font-family:Consolas,Monaco,monospace;font-size:0.9em;line-height:1.5;"><code class="\1">\2</code></pre>',
-            content,
-            flags=re.DOTALL
-        )
-        
-        # Handle pre tags without code inside
-        content = re.sub(
-            r'<pre>(.*?)</pre>',
-            r'<pre style="background-color:#2d2d2d;color:#f8f8f2;padding:15px;border-radius:5px;overflow-x:auto;font-family:Consolas,Monaco,monospace;font-size:0.9em;line-height:1.5;">\1</pre>',
-            content,
-            flags=re.DOTALL
-        )
-        
-        return content
-    
-    def _validate_and_sanitize_html(self, content: str) -> str:
-        """Validate and sanitize HTML content to prevent raw HTML tags from appearing in compose view"""
-        logger.info("Validating and sanitizing HTML content...")
-        
-        # Fix specific malformed HTML patterns that appear as raw text
-        # This addresses the issue where HTML attributes appear without proper opening tags
-        
-        # Pattern 1: Fix broken <a> tags where opening tag is missing but attributes are present
-        # Matches: filename.html" style="...">text
-        # This is the pattern seen in the screenshot
-        content = re.sub(
-            r'(\S+\.html)"\s+style="color:#0066cc;text-decoration:none;">([a-zA-Z]+)(\s|$)',
-            r'<a href="\1" style="color:#0066cc;text-decoration:none;">\2</a>\3',
-            content
-        )
-        
-        # Pattern 2: Fix broken <a> tags with title attribute
-        # Matches: filename.html" title="...">text
-        content = re.sub(
-            r'(\S+\.html)"\s+title="[^"]*">([a-zA-Z\s]+)(\s|$|:)',
-            r'<a href="\1" title="\2">\2</a>\3',
-            content
-        )
-        
-        # Pattern 3: Fix cases where HTML entities are not properly decoded
-        content = unescape(content)
-        
-        # Pattern 4: Ensure all <a> tags are properly closed
-        # Count opening and closing <a> tags
-        open_tags = len(re.findall(r'<a\s', content, re.IGNORECASE))
-        close_tags = len(re.findall(r'</a>', content, re.IGNORECASE))
-        
-        if open_tags > close_tags:
-            # Add missing closing tags
-            missing = open_tags - close_tags
-            logger.warning(f"Found {missing} unclosed <a> tags, adding closing tags")
-            # Add closing tags at the end for any remaining unclosed tags
-            content += '</a>' * missing
-        
-        # Pattern 5: Remove orphaned closing tags (more closing than opening)
-        if close_tags > open_tags:
-            # Remove excess closing tags
-            excess = close_tags - open_tags
-            logger.warning(f"Found {excess} orphaned </a> tags, removing them")
-            content = re.sub(r'</a>', '', content, count=excess)
-        
-        # Validate: Check for common HTML syntax errors
-        errors = []
-        
-        # Check for unclosed tags (other than <a>)
-        tag_stack = []
-        tag_pattern = r'<(/?)(\w+)[^>]*>'
-        
-        for match in re.finditer(tag_pattern, content, re.IGNORECASE):
-            is_closing = match.group(1) == '/'
-            tag_name = match.group(2).lower()
-            
-            # Skip self-closing and void elements
-            if tag_name in ['img', 'br', 'hr', 'input', 'meta', 'link']:
+        """Style code elements through the parsed tree without rewriting their text."""
+        soup = BeautifulSoup(content, 'html.parser')
+        for pre in soup.find_all('pre'):
+            pre['style'] = (pre.get('style', '') + ';background-color:#2d2d2d;color:#f8f8f2;'
+                            'padding:15px;border-radius:5px;overflow-x:auto;'
+                            'font-family:Consolas,Monaco,monospace;font-size:0.9em;line-height:1.5').lstrip(';')
+        for code in soup.find_all('code'):
+            if code.find_parent('pre'):
                 continue
-                
-            if is_closing:
-                if tag_stack and tag_stack[-1] == tag_name:
-                    tag_stack.pop()
-                else:
-                    errors.append(f"Unexpected closing tag: </{tag_name}>")
-            else:
-                tag_stack.append(tag_name)
-        
-        if tag_stack:
-            errors.append(f"Unclosed tags: {tag_stack}")
-        
-        # Log validation results
-        if errors:
-            logger.warning(f"HTML validation found issues: {errors}")
-            logger.info("Content has been sanitized but may still have issues")
-        else:
-            logger.info("HTML validation passed - no issues detected")
-        
-        return content
-    
+            code['style'] = (code.get('style', '') + ';background-color:#f4f4f4;padding:2px 6px;'
+                             'border-radius:3px;font-family:Consolas,Monaco,monospace;'
+                             'font-size:0.9em;color:#d63384').lstrip(';')
+        return str(soup)
+
+    def _validate_and_sanitize_html(self, content: str) -> str:
+        """Repair HTML fragments while preserving escaped code examples as text."""
+        soup = BeautifulSoup(content, 'html.parser')
+        for comment in soup.find_all(string=lambda value: isinstance(value, Comment)):
+            comment.extract()
+        allowed_tags = {
+            'a', 'p', 'div', 'span', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+            'ul', 'ol', 'li', 'blockquote', 'pre', 'code', 'strong', 'b',
+            'em', 'i', 'img', 'br', 'hr', 'table', 'thead', 'tbody', 'tr',
+            'th', 'td'
+        }
+        for tag in soup.find_all(True):
+            if tag.name.lower() not in allowed_tags:
+                tag.unwrap()
+                continue
+            if tag.name.lower() == 'h1':
+                tag.name = 'h2'  # Blogger renders the post title as the page's H1.
+            for attribute in list(tag.attrs):
+                if attribute.lower().startswith('on'):
+                    del tag.attrs[attribute]
+            for attribute in ('href', 'src'):
+                value = tag.get(attribute)
+                if value and re.match(r'\s*(javascript|data|vbscript):', str(value), re.IGNORECASE):
+                    del tag.attrs[attribute]
+            style = tag.get('style')
+            if style and re.search(r'(expression\s*\(|url\s*\(|javascript:)', style, re.IGNORECASE):
+                del tag.attrs['style']
+        for image in soup.find_all('img'):
+            image['alt'] = str(image.get('alt', '')).strip()
+        # Return fragment content only; Blogger supplies the document wrapper.
+        return ''.join(str(node) for node in soup.contents)
+
     def _apply_internal_links(self, content: str, internal_links: list) -> str:
-        """Apply internal links to content"""
-        import re
-        
+        """Link the first matching text node without changing code or existing links."""
+        soup = BeautifulSoup(content, 'html.parser')
         for link in internal_links:
-            anchor = link.get('anchor_text', '')
-            url = link.get('target_url', '')
-            
-            if anchor and url:
-                # Replace first occurrence of anchor text with link
-                pattern = re.escape(anchor)
-                replacement = f'<a href="{url}" style="color:#0066cc;text-decoration:none;">{anchor}</a>'
-                content = re.sub(pattern, replacement, content, count=1)
-        
-        return content
-    
+            anchor = str(link.get('anchor_text', '')).strip()
+            url = str(link.get('target_url', '')).strip()
+            if not anchor or not url:
+                continue
+            pattern = re.compile(r'\b' + re.escape(anchor) + r'\b', re.IGNORECASE)
+            for text_node in soup.find_all(string=True):
+                if text_node.parent.name in {'a', 'code', 'pre', 'script', 'style'}:
+                    continue
+                match = pattern.search(str(text_node))
+                if not match:
+                    continue
+                value = str(text_node)
+                nodes = []
+                if value[:match.start()]:
+                    nodes.append(value[:match.start()])
+                linked = soup.new_tag('a', href=url)
+                linked['style'] = 'color:#0066cc;text-decoration:none'
+                linked.string = value[match.start():match.end()]
+                nodes.append(linked)
+                if value[match.end():]:
+                    nodes.append(value[match.end():])
+                text_node.replace_with(*nodes)
+                break
+        return str(soup)
+
     def _apply_font_style(self, content: str, font_style: str) -> str:
         """Apply consistent font style to content, preserving code block fonts"""
-        import re
-        
-        # Protect code blocks by temporarily replacing them with unique placeholders
-        code_blocks = []
-        
-        # Match <pre> tags (code blocks) - these are the main code blocks
-        def protect_code_blocks(match):
-            code_blocks.append(match.group(0))
-            return f"__CODE_BLOCK_{len(code_blocks)-1}__"
-        
-        # Protect <pre> tags and their content (multiline)
-        content = re.sub(r'<pre[^>]*>.*?</pre>', protect_code_blocks, content, flags=re.DOTALL)
-        
-        # Protect <code> tags that are not inside <pre> tags
-        # First, we need to handle code tags that might be inline
-        content = re.sub(r'<code[^>]*>.*?</code>', protect_code_blocks, content, flags=re.DOTALL)
-        
-        # Remove any existing font-family styles from content to ensure consistency
-        # But only from non-code content (code blocks are already protected)
-        content = re.sub(r'font-family\s*:\s*[^;]+;?', '', content)
-        content = re.sub(r'font-family\s*=\s*["\'][^"\']+["\']', '', content)
-        
-        # Wrap the entire content in a div with consistent font
-        font_div = f'<div style="font-family:{font_style};line-height:1.6;">{content}</div>'
-        
-        # Restore code blocks in reverse order to handle nested replacements correctly
-        for i in range(len(code_blocks) - 1, -1, -1):
-            font_div = font_div.replace(f"__CODE_BLOCK_{i}__", code_blocks[i])
-        
-        return font_div
+        soup = BeautifulSoup(content, 'html.parser')
+        wrapper = soup.new_tag('div')
+        wrapper['style'] = f'font-family:{font_style};line-height:1.6'
+        for child in list(soup.contents):
+            wrapper.append(child.extract())
+        soup.append(wrapper)
+        return str(soup)
     
     def _update_search_description(self, post_id: str, description: str):
         """Update the search description for a post"""

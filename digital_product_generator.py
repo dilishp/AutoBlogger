@@ -3,6 +3,8 @@ Digital product generator for creating comprehensive products alongside blog pos
 """
 import logging
 import json
+import re
+import zipfile
 from pathlib import Path
 from typing import Dict, Optional, List
 from openai import OpenAI
@@ -22,35 +24,74 @@ class DigitalProductGenerator:
     
     def generate_product(self, blog_title: str, blog_content: str, 
                        blog_tags: List[str], blog_niche: str, 
-                       topic_demand: str = 'medium') -> Dict:
-        """Generate a comprehensive digital product from blog content"""
+                       topic_demand: str = 'medium') -> Optional[Dict]:
+        """Generate a packaged utility only when the topic supports a useful product."""
         logger.info(f"Generating digital product for: {blog_title} (demand: {topic_demand})")
-        
-        product_data = {
-            'title': self._generate_product_title(blog_title),
-            'description': self._generate_product_description(blog_title, blog_content),
-            'content': self._generate_comprehensive_content(blog_title, blog_content, blog_niche),
-            'checklist': self._generate_checklist(blog_title, blog_content),
-            'templates': self._generate_templates(blog_title, blog_content),
-            'tools': self._generate_functional_tools(blog_title, blog_content, blog_niche),
+        opportunity = self._assess_product_opportunity(blog_title, blog_content, blog_niche)
+        if not opportunity:
+            logger.info("No standalone utility opportunity for this topic; skipping Gumroad product")
+            return None
+
+        app_html = self._generate_browser_utility(blog_title, blog_content, opportunity)
+        if not app_html:
+            logger.warning("Could not create a valid packaged utility; skipping product")
+            return None
+        return {
+            'title': opportunity['title'][:60],
+            'description': opportunity['description'],
+            'content': app_html,
+            'utility_name': opportunity['utility_name'],
+            'problem': opportunity['problem'],
             'pricing': self._suggest_pricing(blog_niche, topic_demand),
-            'marketing_copy': self._generate_marketing_copy(blog_title, blog_content),
             'demand_level': topic_demand,
-            'niche': blog_niche
+            'niche': blog_niche,
+            'quality_score': 100,
+            'checklist': [],
+            'templates': [],
+            'tools': [],
+            'marketing_copy': opportunity['description'],
         }
-        
-        # Validate product data
-        if not product_data['title'] or not product_data['content']:
-            logger.error("Product generation failed - missing critical data")
-            # Return minimal product data as fallback
-            return self._generate_minimal_product(blog_title, blog_content)
-        
-        # Quality validation
-        quality_score = self._validate_product_quality(product_data)
-        product_data['quality_score'] = quality_score
-        logger.info(f"Product quality score: {quality_score}/100")
-        
-        return product_data
+
+    def _assess_product_opportunity(self, title: str, content: str, niche: str) -> Optional[Dict]:
+        """Return a concrete utility brief or reject topics that only support editorial content."""
+        try:
+            response = self.client.chat.completions.create(
+                model=config.openai_model_digital_product,
+                max_tokens=500,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": "Assess whether a blog topic supports a useful standalone interactive browser utility. Reject opinion, news, broad explainers, and topics where a free article is sufficient. Accept only a repeated, specific user task that a self-contained browser app can materially simplify. Return JSON: {\"fit\": boolean, \"utility_name\": string, \"problem\": string, \"title\": string, \"description\": string}. Be conservative."},
+                    {"role": "user", "content": f"Niche: {niche}\nTopic: {title}\nArticle: {content[:2500]}\nOnly accept a tool with a clear input, useful output, and audience who would use it repeatedly."}
+                ]
+            )
+            data = json.loads(response.choices[0].message.content)
+            required = ('utility_name', 'problem', 'title', 'description')
+            if not data.get('fit') or any(not str(data.get(k, '')).strip() for k in required):
+                return None
+            return data
+        except Exception as exc:
+            logger.warning(f"Product opportunity assessment failed: {exc}")
+            return None
+
+    def _generate_browser_utility(self, title: str, content: str, brief: Dict) -> Optional[str]:
+        """Generate a self-contained HTML app; reject code snippets and script-only outputs."""
+        try:
+            response = self.client.chat.completions.create(
+                model=config.openai_model_digital_product,
+                max_tokens=config.max_tokens_digital_product,
+                messages=[
+                    {"role": "system", "content": "Build polished, genuinely useful single-file browser applications in plain HTML/CSS/JavaScript. Output only complete HTML, with no markdown fences. The app must work offline, have a clear form/input and actionable result, validate input, be responsive and accessible, and require no external services or dependencies. Do not output a tutorial, shell, or standalone script."},
+                    {"role": "user", "content": f"Create a complete offline browser utility named {brief['utility_name']} for this problem: {brief['problem']}\nContext: {title}\n{content[:2000]}\nMake it useful on its own, not a demo. Include practical defaults and copy/export results where relevant."}
+                ]
+            )
+            html = response.choices[0].message.content.strip()
+            html = re.sub(r'^```(?:html)?\s*|\s*```$', '', html, flags=re.IGNORECASE)
+            if '<html' not in html.lower() or '<script' not in html.lower() or len(html) < 1200:
+                return None
+            return html
+        except Exception as exc:
+            logger.warning(f"Browser utility generation failed: {exc}")
+            return None
     
     def _validate_product_quality(self, product_data: Dict) -> int:
         """Validate product quality and return a score out of 100"""
@@ -507,79 +548,24 @@ Return the tools in this JSON format:
         
         saved_files = {}
         
-        # Save comprehensive content as markdown
-        content_file = product_folder / "product_content.md"
-        with open(content_file, 'w', encoding='utf-8') as f:
-            f.write(f"# {product_data['title']}\n\n")
-            f.write(product_data['content'])
-        saved_files['content'] = str(content_file)
+        # Gumroad receives an install-free application package, never a guide or loose script.
+        app_folder = product_folder / "utility"
+        app_folder.mkdir(parents=True, exist_ok=True)
+        app_file = app_folder / "index.html"
+        app_file.write_text(product_data['content'], encoding='utf-8')
+        readme = app_folder / "README.txt"
+        readme.write_text(
+            f"{product_data['title']}\n\n{product_data.get('description', '')}\n\n"
+            "Open index.html in any modern browser. The utility runs locally and needs no installation or account.\n",
+            encoding='utf-8'
+        )
+        package_file = product_folder / "utility_package.zip"
+        with zipfile.ZipFile(package_file, 'w', zipfile.ZIP_DEFLATED) as archive:
+            archive.write(app_file, "utility/index.html")
+            archive.write(readme, "utility/README.txt")
+        saved_files['content'] = str(package_file)
+        saved_files['package'] = str(package_file)
         
-        # Save product description
-        desc_file = product_folder / "product_description.txt"
-        with open(desc_file, 'w', encoding='utf-8') as f:
-            f.write(product_data['description'])
-        saved_files['description'] = str(desc_file)
-        
-        # Save checklist
-        checklist_file = product_folder / "checklist.txt"
-        with open(checklist_file, 'w', encoding='utf-8') as f:
-            f.write("Implementation Checklist:\n\n")
-            for item in product_data['checklist']:
-                f.write(f"- {item}\n")
-        saved_files['checklist'] = str(checklist_file)
-        
-        # Save templates
-        templates_file = product_folder / "templates.json"
-        with open(templates_file, 'w', encoding='utf-8') as f:
-            json.dump(product_data['templates'], f, indent=2)
-        saved_files['templates'] = str(templates_file)
-        
-        # Save functional tools as individual files
-        tools_folder = product_folder / "tools"
-        tools_folder.mkdir(parents=True, exist_ok=True)
-        saved_tools = []
-        
-        for i, tool in enumerate(product_data.get('tools', [])):
-            tool_name = "".join(c for c in tool.get('name', f'tool_{i}') if c.isalnum() or c in (' ', '-', '_')).strip()
-            tool_name = tool_name.replace(' ', '_').lower()
-            
-            # Save tool code
-            tool_file = tools_folder / f"{tool_name}.{self._get_extension(tool.get('language', 'python'))}"
-            with open(tool_file, 'w', encoding='utf-8') as f:
-                f.write(tool.get('code', ''))
-            saved_tools.append(str(tool_file))
-            
-            # Save tool documentation
-            tool_doc = tools_folder / f"{tool_name}_README.md"
-            with open(tool_doc, 'w', encoding='utf-8') as f:
-                f.write(f"# {tool.get('name', 'Tool')}\n\n")
-                f.write(f"**Type:** {tool.get('type', 'Script')}\n\n")
-                f.write(f"**Purpose:** {tool.get('purpose', '')}\n\n")
-                f.write(f"**Target Users:** {tool.get('target_users', '')}\n\n")
-                f.write(f"**Language/Framework:** {tool.get('language', '')}\n\n")
-                f.write(f"**Monetization Value:** {tool.get('monetization_value', '')}\n\n")
-                f.write("## Installation\n\n")
-                f.write(tool.get('installation', '') + "\n\n")
-                f.write("## Usage\n\n")
-                f.write(tool.get('usage', '') + "\n\n")
-                f.write("## Configuration\n\n")
-                f.write(tool.get('configuration', '') + "\n\n")
-                f.write("## Dependencies\n\n")
-                for dep in tool.get('dependencies', []):
-                    f.write(f"- {dep}\n")
-                f.write("\n## Customization\n\n")
-                f.write(tool.get('customization', ''))
-            saved_tools.append(str(tool_doc))
-        
-        saved_files['tools'] = saved_tools
-        
-        # Save marketing copy
-        marketing_file = product_folder / "marketing_copy.txt"
-        with open(marketing_file, 'w', encoding='utf-8') as f:
-            f.write(product_data['marketing_copy'])
-        saved_files['marketing'] = str(marketing_file)
-        
-        # Save metadata
         metadata_file = product_folder / "product_metadata.json"
         metadata = {
             'title': product_data['title'],
@@ -588,12 +574,10 @@ Return the tools in this JSON format:
             'quality_score': product_data.get('quality_score', 0),
             'demand_level': product_data.get('demand_level', 'medium'),
             'niche': product_data.get('niche', ''),
-            'tools_count': len(product_data.get('tools', [])),
-            'templates_count': len(product_data.get('templates', [])),
-            'checklist_count': len(product_data.get('checklist', []))
+            'product_type': 'offline_browser_utility',
+            'problem': product_data.get('problem', '')
         }
-        with open(metadata_file, 'w', encoding='utf-8') as f:
-            json.dump(metadata, f, indent=2)
+        metadata_file.write_text(json.dumps(metadata, indent=2), encoding='utf-8')
         saved_files['metadata'] = str(metadata_file)
         
         logger.info(f"Saved product files to: {product_folder}")

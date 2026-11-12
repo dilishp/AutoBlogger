@@ -50,7 +50,9 @@ class BlogAIAgent:
                          generate_images: bool = True,
                          generate_youtube_video: bool = False,
                          publish_immediately: bool = False,
-                         topics_file: Optional[str] = None) -> Dict:
+                         topics_file: Optional[str] = None,
+                         publish_post: bool = True,
+                         generate_social_media: bool = True) -> Dict:
         """Run the complete blog creation workflow"""
         logger.info("=" * 60)
         logger.info("Starting Full Blog Creation Workflow")
@@ -93,7 +95,9 @@ class BlogAIAgent:
                     opportunity,
                     generate_images,
                     generate_youtube_video,
-                    publish_immediately
+                    publish_immediately,
+                    publish_post,
+                    generate_social_media
                 )
                 
                 workflow_result['posts_created'].append(post_result)
@@ -121,7 +125,9 @@ class BlogAIAgent:
     def _process_single_opportunity(self, opportunity: TopicOpportunity,
                                    generate_images: bool,
                                    generate_youtube_video: bool,
-                                   publish_immediately: bool) -> Dict:
+                                   publish_immediately: bool,
+                                   publish_post: bool = True,
+                                   generate_social_media: bool = True) -> Dict:
         """Process a single topic opportunity"""
         post_result = {
             'topic': opportunity.topic,
@@ -168,39 +174,55 @@ class BlogAIAgent:
                         config.blog_niche,
                         topic_demand
                     )
-                    
-                    # Save product files
-                    saved_product = self.digital_product_generator.save_product_files(
-                        product_data,
-                        blog_post.title
-                    )
-                    
-                    # Upload to Gumroad
-                    gumroad_result = self.gumroad_client.create_product(
-                        product_data['title'],
-                        product_data['description'],
-                        product_data['pricing'],
-                        tags=blog_post.tags
-                    )
-                    
-                    if gumroad_result:
-                        product_id = gumroad_result.get('product', {}).get('id')
-                        product_url = self.gumroad_client.get_product_url(product_id)
-                        
-                        # Add product link to blog content
-                        if product_url:
-                            product_cta = f'\n\n<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; text-align: center; margin: 30px 0;">\n<h3 style="margin: 0 0 10px 0;">🚀 Get the Complete Guide</h3>\n<p style="margin: 0 0 15px 0;">Want the full implementation details, templates, and checklists?</p>\n<a href="{product_url}" style="display: inline-block; background: white; color: #667eea; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">Get the Digital Product</a>\n</div>'
-                            blog_post.content += product_cta
-                            logger.info(f"Added Gumroad product link to blog: {product_url}")
-                    
-                    product_result = {
-                        'success': True,
-                        'folder': saved_product.get('folder', ''),
-                        'files': saved_product.get('files', {}),
-                        'gumroad_url': product_url if gumroad_result else None
-                    }
-                    post_result['steps'].append('digital_product_generation')
-                    post_result['digital_product'] = product_result
+
+                    if not product_data:
+                        logger.info("  ℹ No useful standalone product fits this topic; skipping Gumroad")
+                        post_result['digital_product'] = {
+                            'success': False,
+                            'skipped': True,
+                            'reason': 'No suitable packaged utility for this topic'
+                        }
+                    else:
+                        # Save the install-free utility package for Gumroad.
+                        saved_product = self.digital_product_generator.save_product_files(
+                            product_data,
+                            blog_post.title
+                        )
+
+                        # Upload only the packaged utility, never the source article.
+                        product_url = None
+                        gumroad_result = self.gumroad_client.create_product(
+                            product_data['title'],
+                            product_data['description'],
+                            product_data['pricing'],
+                            file_path=saved_product.get('files', {}).get('package'),
+                            tags=blog_post.tags
+                        )
+                        if gumroad_result:
+                            product_id = gumroad_result.get('product', {}).get('id')
+                            product_url = self.gumroad_client.get_product_url(product_id)
+                            if product_url:
+                                utility_name = product_data['utility_name']
+                                utility_problem = product_data['problem']
+                                product_cta = f"""
+<div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 10px; text-align: center; margin: 30px 0;">
+<h3 style="margin: 0 0 10px 0;">🚀 Try {utility_name}</h3>
+<p style="margin: 0 0 15px 0;">{utility_problem}</p>
+<a href="{product_url}" style="display: inline-block; background: white; color: #667eea; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">Get the browser utility</a>
+</div>"""
+                                blog_post.content += product_cta
+                                logger.info(f"Added Gumroad product link to blog: {product_url}")
+                        product_result = {
+                            'success': bool(gumroad_result),
+                            'manual_upload_required': not bool(gumroad_result),
+                            'reason': 'Gumroad REST API does not support product creation or file uploads' if not gumroad_result else None,
+                            'folder': saved_product.get('folder', ''),
+                            'files': saved_product.get('files', {}),
+                            'local_package': saved_product.get('files', {}).get('package'),
+                            'gumroad_url': product_url if gumroad_result else None
+                        }
+                        post_result['steps'].append('digital_product_generation')
+                        post_result['digital_product'] = product_result
                     
                 except Exception as e:
                     logger.error(f"Digital product generation failed: {e}")
@@ -259,19 +281,28 @@ class BlogAIAgent:
             font_style = self.blogger_publisher.analyze_font_style(self.existing_posts)
             logger.info(f"  ✓ Using font style: {font_style}")
             
-            # Step 7: Publish to Blogger
-            logger.info("  - Publishing to Blogger...")
-            publish_result = self.blogger_publisher.publish_blog_post(
-                blog_post,
-                as_draft=not publish_immediately,
-                font_style=font_style,
-                image_paths=image_paths,
-                content_index=self.content_index
-            )
-            post_result['steps'].append('publishing')
-            post_result['publish_result'] = publish_result
-            
-            if publish_result['success']:
+            publish_result = {'success': False, 'skipped': not publish_post}
+            blog_post_url = ''
+            if publish_post:
+                # Step 7: Publish to Blogger
+                logger.info("  - Publishing to Blogger...")
+                publish_result = self.blogger_publisher.publish_blog_post(
+                    blog_post,
+                    as_draft=not publish_immediately,
+                    font_style=font_style,
+                    image_paths=image_paths,
+                    content_index=self.content_index
+                )
+                post_result['steps'].append('publishing')
+                post_result['publish_result'] = publish_result
+            else:
+                logger.info("  ℹ Blogger publishing disabled; saving generated post locally")
+                post_file = config.output_dir / (''.join(c if c.isalnum() or c in ' -_' else '_' for c in blog_post.title).strip().replace(' ', '_')[:100] + '.html')
+                post_file.parent.mkdir(parents=True, exist_ok=True)
+                post_file.write_text(blog_post.content, encoding='utf-8')
+                post_result['draft_path'] = str(post_file)
+
+            if publish_result['success'] or not publish_post:
                 # Update blog post with URL
                 blog_post_url = publish_result.get('url', '')
                 post_result['url'] = blog_post_url
@@ -312,56 +343,41 @@ class BlogAIAgent:
                     logger.info("  ℹ YouTube video generation disabled")
                 
                 # Step 9: Generate social media posts
-                logger.info("  - Generating social media posts...")
-                blog_post_dict = {
-                    'title': blog_post.title,
-                    'content': blog_post.content,
-                    'url': blog_post_url
-                }
-                social_posts = self.social_media_generator.generate_all_platforms(blog_post_dict)
-                post_result['steps'].append('social_media_generation')
-                post_result['social_posts'] = {
-                    platform: {
-                        'content': post.content,
-                        'hashtags': post.hashtags,
-                        'character_count': post.character_count
-                    }
-                    for platform, post in social_posts.items()
-                }
-                
-                # Save social media posts to files
-                logger.info("  - Saving social media posts to files...")
-                social_media_dir = self._save_social_media_posts(
-                    blog_post.title,
-                    blog_post_url,
-                    social_posts
-                )
-                post_result['social_media_dir'] = social_media_dir
-                logger.info(f"  ✓ Social media posts saved to: {social_media_dir}")
+                blog_post_dict = {'title': blog_post.title, 'content': blog_post.content, 'url': blog_post_url}
+                if generate_social_media:
+                    logger.info("  - Generating social media posts...")
+                    social_posts = self.social_media_generator.generate_all_platforms(blog_post_dict)
+                    post_result['steps'].append('social_media_generation')
+                    post_result['social_posts'] = {platform: {'content': post.content, 'hashtags': post.hashtags, 'character_count': post.character_count} for platform, post in social_posts.items()}
+                    logger.info("  - Saving social media posts to files...")
+                    social_media_dir = self._save_social_media_posts(blog_post.title, blog_post_url, social_posts)
+                    post_result['social_media_dir'] = social_media_dir
+                    logger.info(f"  ✓ Social media posts saved to: {social_media_dir}")
                 
                 # Step 8: Generate backlink suggestions and apply them
-                logger.info("  - Generating backlink suggestions...")
-                backlink_suggestions = self.internal_linker.suggest_backlinks(
-                    blog_post_dict,
-                    self.content_index
-                )
-                post_result['steps'].append('backlink_analysis')
-                post_result['backlink_suggestions'] = backlink_suggestions
+                if publish_post:
+                    logger.info("  - Generating backlink suggestions...")
+                    backlink_suggestions = self.internal_linker.suggest_backlinks(
+                        blog_post_dict,
+                        self.content_index
+                    )
+                    post_result['steps'].append('backlink_analysis')
+                    post_result['backlink_suggestions'] = backlink_suggestions
                 
                 # Step 9: Update old posts with backlinks to new content
-                logger.info("  - Adding backlinks from existing posts...")
-                updated_posts_count = self.internal_linker.update_old_posts_with_links(
-                    blog_post_dict,
-                    self.content_index,
-                    self.blogger_client
-                )
-                post_result['steps'].append('backlink_application')
-                post_result['backlinks_added'] = updated_posts_count
-                logger.info(f"  ✓ Added backlinks from {updated_posts_count} existing posts")
+                    logger.info("  - Adding backlinks from existing posts...")
+                    updated_posts_count = self.internal_linker.update_old_posts_with_links(
+                        blog_post_dict,
+                        self.content_index,
+                        self.blogger_client
+                    )
+                    post_result['steps'].append('backlink_application')
+                    post_result['backlinks_added'] = updated_posts_count
+                    logger.info(f"  ✓ Added backlinks from {updated_posts_count} existing posts")
                 
                 post_result['success'] = True
                 logger.info(f"  ✓ Successfully processed: {blog_post.title}")
-            else:
+            elif publish_post:
                 post_result['success'] = False
                 post_result['error'] = publish_result.get('error', 'Unknown error')
                 logger.error(f"  ✗ Failed to publish: {post_result['error']}")
@@ -526,7 +542,9 @@ class BlogAIAgent:
     def create_from_topic(self, topic: str, 
                          generate_images: bool = True,
                          generate_youtube_video: bool = False,
-                         publish_immediately: bool = False) -> Dict:
+                         publish_immediately: bool = False,
+                         publish_post: bool = True,
+                         generate_social_media: bool = True) -> Dict:
         """Create a blog post from a specific topic"""
         logger.info(f"Creating blog post from topic: {topic}")
         
@@ -559,7 +577,9 @@ class BlogAIAgent:
             opportunity,
             generate_images,
             generate_youtube_video,
-            publish_immediately
+            publish_immediately,
+            publish_post,
+            generate_social_media
         )
         
         return result
@@ -737,6 +757,19 @@ class BlogAIAgent:
             blog_content = post.get('content', '')
             
             logger.info(f"  - Found post: {blog_title} (ID: {post_id})")
+            logger.info(f"  - Blog content length: {len(blog_content)} characters")
+            
+            # Strip HTML tags from content for better script generation
+            import re
+            # Remove HTML tags
+            blog_content_clean = re.sub(r'<[^>]+>', ' ', blog_content)
+            # Remove extra whitespace
+            blog_content_clean = re.sub(r'\s+', ' ', blog_content_clean).strip()
+            logger.info(f"  - Cleaned content length: {len(blog_content_clean)} characters")
+            logger.info(f"  - Content preview: {blog_content_clean[:200]}...")
+            
+            # Use cleaned content for video generation
+            blog_content = blog_content_clean
             
             # Generate YouTube video
             logger.info("  - Generating YouTube video...")
@@ -799,6 +832,8 @@ def main():
                        default='full', help='Operation mode')
     parser.add_argument('--topic', type=str, help='Specific topic to create content for')
     parser.add_argument('--url', type=str, help='Post URL for social media, link updates, or YouTube video generation')
+    parser.add_argument('--youtube-only', action='store_true',
+                       help='Generate a YouTube video for an existing post (requires --url)')
     parser.add_argument('--num-topics', type=int, default=1, help='Number of topics to process')
     parser.add_argument('--no-images', action='store_true', help='Skip image generation')
     parser.add_argument('--youtube-video', action='store_true', help='Generate YouTube video')
@@ -806,12 +841,17 @@ def main():
     parser.add_argument('--topics-file', type=str, help='Path to text file containing topics (one per line)')
     
     args = parser.parse_args()
+
+    if args.youtube_only and not args.url:
+        parser.error('--youtube-only requires --url')
     
     # Initialize agent
     agent = BlogAIAgent()
     
     # Run based on mode
-    if args.mode == 'full':
+    if args.youtube_only:
+        result = agent.generate_youtube_video_only(args.url)
+    elif args.mode == 'full':
         result = agent.run_full_workflow(
             num_topics=args.num_topics,
             generate_images=not args.no_images,

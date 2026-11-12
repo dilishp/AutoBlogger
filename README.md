@@ -5,9 +5,9 @@ An intelligent AI-powered agent for automated blog content creation, SEO optimiz
 ## Features
 
 - **SEO Research**: Discovers high-demand, low-competition topics using AI analysis
-- **Content Generation**: Creates SEO-optimized blog posts with proper structure and formatting (800-1200 words)
-- **Digital Products**: Automatically generates comprehensive digital products for each blog post
-- **Gumroad Integration**: Uploads and sells digital products via Gumroad marketplace
+- **Content Generation**: Creates structured, edited technical posts with validated HTML and code formatting
+- **Digital Products**: Prepares a packaged offline browser utility when a topic supports a useful product
+- **Gumroad Integration**: Prepares local product packages; publishing requires Gumroad MCP or dashboard upload
 - **Image Generation**: Generates custom images using OpenAI
 - **Cloudinary Hosting**: Automatically uploads images to Cloudinary for reliable hosting
 - **Internal Linking**: Automatically builds internal links between related posts
@@ -97,6 +97,25 @@ TARGET_AUDIENCE=general_professionals
 
 ## Usage
 
+### Desktop application
+
+The desktop interface is an additional entry point; the existing `python blog_agent.py` command and its options remain available. Install the project dependencies, then launch:
+
+```bash
+python desktop_app.py
+```
+
+Enter a topic or leave it blank to use the configured topics file and topic discovery. Choose whether to publish to Blogger, generate images, create a video, and generate social posts. When Blogger publishing is off, the generated HTML is saved under `output/`. The execution log appears in the lower panel while the workflow runs. Use **Settings** to save provider credentials and model choices to `.env`.
+
+To build a Windows folder distribution, install PyInstaller and run:
+
+```bash
+pip install pyinstaller
+pyinstaller --noconfirm --clean --windowed --onedir --name BlogAIAgent --add-data ".env.example;." desktop_app.py
+```
+
+Distribute the complete `dist/BlogAIAgent/` folder. Keep the folder writable so the app can save `.env`, credentials, and generated output beside the executable. Do not include your development `.env` or API credentials in a customer build. Each customer should enter their own credentials in Settings.
+
 ### Full Workflow Mode
 
 Run the complete automated workflow:
@@ -147,11 +166,22 @@ Update internal links for an existing post:
 python blog_agent.py --mode links --url https://simplifyyourday.blogspot.com/2024/01/your-post.html
 ```
 
+### Generate a YouTube Video Only
+
+Generate a video from an existing post without running the blog or social media workflows:
+
+```bash
+python blog_agent.py --youtube-only --url https://simplifyyourday.blogspot.com/2024/01/your-post.html
+```
+
+This is a shortcut for `--mode youtube-only --url ...`.
+
 ### Command Line Options
 
-- `--mode`: Operation mode (full, research, topic, social, links)
+- `--mode`: Operation mode (full, research, topic, social, links, youtube-only)
 - `--topic`: Specific topic for content creation
-- `--url`: Post URL for social media or link updates
+- `--url`: Post URL for social media, link updates, or YouTube video generation
+- `--youtube-only`: Generate a YouTube video for an existing post (requires `--url`)
 - `--num-topics`: Number of topics to process (default: 1)
 - `--no-images`: Skip image generation
 - `--publish`: Publish immediately instead of saving as draft
@@ -209,20 +239,15 @@ CLOUDINARY_API_SECRET=your_api_secret
 
 Without Cloudinary, the agent uses placeholder images.
 
-### 5. Digital Products
+### 5. Gumroad Utility Products
 
-The agent automatically creates comprehensive digital products for each blog post:
+The agent assesses each topic before preparing a product. Opinion pieces, broad explainers, and topics without a concrete repeated task are skipped. When a topic has a clear utility opportunity, it generates a self-contained offline browser app and packages it as a ZIP containing `index.html` and usage instructions. It does not sell the blog post, generated scripts, or a guide as a product.
 
-**Product Components:**
-- Comprehensive guide (3000-5000 words)
-- Implementation checklist
-- Code templates and snippets
-- Marketing copy
-- Gumroad product listing
+The current Gumroad REST API integration cannot create products or upload product content. With a Gumroad token configured, the agent prepares the ZIP and records its local path for manual upload; it does not claim the product was published. Use Gumroad's official MCP integration or upload the package in the Gumroad dashboard to create and publish a listing.
 
 **Workflow:**
 ```
-Blog Topic → Short Blog Content → Digital Product → Gumroad Upload → Product Link in Blog
+Blog Topic → Utility Fit Assessment → Packaged Browser Utility (or skip) → Manual/MCP Gumroad upload → Product CTA after a product URL exists
 ```
 
 **Configure Gumroad in `.env`:**
@@ -236,13 +261,14 @@ DEFAULT_PRODUCT_PRICE=9.99
 ```
 output/digital_products/
 ├── {blog_title_safe}/
-│   ├── product_content.md
-│   ├── product_description.txt
-│   ├── checklist.txt
-│   ├── templates.json
-│   ├── marketing_copy.txt
+│   ├── utility_package.zip
+│   ├── utility/
+│   │   ├── index.html
+│   │   └── README.txt
 │   └── product_metadata.json
 ```
+
+This workflow does not itself generate Gumroad traffic or measure sales, views, or conversion. Product traction still depends on demand validation and promotion, which should be judged from Gumroad and blog analytics.
 
 ### 6. Internal Linking
 

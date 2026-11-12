@@ -36,6 +36,9 @@ python blog_agent.py --mode links --url https://your-blog.com/post-id
 
 # Generate YouTube video only (from existing post)
 python blog_agent.py --mode youtube-only --url https://your-blog.com/post-id
+
+# Shortcut for YouTube-only generation
+python blog_agent.py --youtube-only --url https://your-blog.com/post-id
 ```
 
 **Available Arguments:**
@@ -45,6 +48,7 @@ python blog_agent.py --mode youtube-only --url https://your-blog.com/post-id
 - `--num-topics`: Number of topics to process (default: 1)
 - `--no-images`: Skip image generation (faster execution)
 - `--youtube-video`: Generate YouTube video along with blog post
+- `--youtube-only`: Generate only a YouTube video for an existing post (requires `--url`)
 - `--publish`: Publish immediately instead of as draft
 - `--topics-file`: Path to text file containing topics (one per line)
 
@@ -232,9 +236,9 @@ If you have specific topics you want to create content for, you can provide them
    
    # Edit topics.txt with your desired topics
    # Example:
-   Practical GitHub Actions caching strategies to speed CI and cut costs
-   Building bulletproof TypeScript API clients from OpenAPI with Zod
-   Cut CI time in half with incremental Turborepo for TypeScript monorepos
+   Understanding Recursion: From Basics to Advanced Patterns
+   Big O Notation Explained: How to Analyze Algorithm Efficiency
+   Design Patterns Every Developer Should Know: Singleton to Observer
    ```
 
 2. Run the agent with the topics file:
@@ -253,9 +257,9 @@ If you have specific topics you want to create content for, you can provide them
    Example topics.txt after processing:
    ```
    # Example topics file
-   [DONE] Practical GitHub Actions caching strategies to speed CI and cut costs
-   [DONE] Building bulletproof TypeScript API clients from OpenAPI with Zod
-   Cut CI time in half with incremental Turborepo for TypeScript monorepos
+   [DONE] Understanding Recursion: From Basics to Advanced Patterns
+   [DONE] Big O Notation Explained: How to Analyze Algorithm Efficiency
+   Design Patterns Every Developer Should Know: Singleton to Observer
    ```
 
 4. If the file is empty or doesn't exist, the agent will fall back to automatic topic discovery.
@@ -518,7 +522,7 @@ The agent saves research results in `output/research/`. To reuse a previously re
 2. Copy the topic from the saved file
 3. Run with that topic:
 ```bash
-python blog_agent.py --mode full --topic "Practical GitHub Actions caching strategies to speed CI and cut costs"
+python blog_agent.py --mode full --topic "Understanding Recursion: From Basics to Advanced Patterns"
 ```
 
 ### Method 3: Continue from Draft

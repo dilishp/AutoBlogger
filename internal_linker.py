@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from openai import OpenAI
 from config import config
 import re
+from bs4 import BeautifulSoup
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -219,148 +220,88 @@ class InternalLinker:
         # Use title as fallback
         return target_title
     
-    def apply_internal_links(self, content: str, 
+    def apply_internal_links(self, content: str,
                             links: List[InternalLink]) -> str:
-        """Apply internal links to content"""
-        logger.info(f"Applying {len(links)} internal links to content...")
-        
-        modified_content = content
-        links_applied = 0
-        
+        """Add links to matching prose text nodes, never to code or existing links."""
+        from urllib.parse import urlparse
+
+        soup = BeautifulSoup(content, 'html.parser')
+        applied = 0
         for link in links:
-            # Find the anchor text in content
-            anchor_pattern = re.escape(link.anchor_text)
-            
-            # Check if the pattern is already inside an <a> tag
-            def is_inside_link(match):
-                start = match.start()
-                end = match.end()
-                # Look backwards for opening <a> tag
-                before = modified_content[:start]
-                # Look forwards for closing </a> tag
-                after = modified_content[end:]
-                # If we're already inside a link, don't replace
-                if '<a' in before.rsplit('>', 1)[-1] or '</a>' in after.split('<', 1)[0]:
-                    return True
-                return False
-            
-            # Find all matches and replace the first one that's not already in a link
-            for match in re.finditer(anchor_pattern, modified_content):
-                if not is_inside_link(match):
-                    # Create the replacement link
-                    replacement = f'<a href="{link.target_url}" title="{link.target_title}">{match.group(0)}</a>'
-                    modified_content = modified_content[:match.start()] + replacement + modified_content[match.end():]
-                    links_applied += 1
-                    logger.info(f"Applied link: {link.anchor_text} -> {link.target_title}")
-                    break
-        
-        logger.info(f"Applied {links_applied}/{len(links)} internal links")
-        return modified_content
-    
-    def process_link_placeholders(self, content: str, 
-                                content_index: Dict[str, Dict]) -> str:
-        """Process [LINK: topic] placeholders and convert them to actual links"""
-        import re
-        from difflib import SequenceMatcher
-        
-        logger.info("Processing link placeholders...")
-        
-        # Log available posts in content index for debugging
-        if content_index:
-            logger.info(f"Content index has {len(content_index)} posts available for linking")
-            available_titles = [post.get('title', 'Unknown') for post in content_index.values()]
-            logger.debug(f"Available posts: {available_titles}")
-        else:
-            logger.warning("Content index is empty - no posts available for linking")
-        
-        # Find all [LINK: topic] placeholders
-        placeholder_pattern = r'\[LINK:\s*([^\]]+)\]'
-        placeholders = re.findall(placeholder_pattern, content)
-        
-        if not placeholders:
-            logger.info("No link placeholders found")
-            return content
-        
-        logger.info(f"Found {len(placeholders)} link placeholders: {placeholders}")
-        
-        modified_content = content
-        links_converted = 0
-        
-        for placeholder_topic in placeholders:
-            # Skip generic placeholders
-            if placeholder_topic.lower() in ['related topic', 'related', 'topic', 'link']:
-                logger.warning(f"Skipping generic placeholder: '{placeholder_topic}' - too vague to match")
-                modified_content = modified_content.replace(f'[LINK: {placeholder_topic}]', placeholder_topic)
+            anchor = str(link.anchor_text or '').strip()
+            url = str(link.target_url or '').strip()
+            if not anchor or urlparse(url).scheme not in {'http', 'https'}:
                 continue
-            
-            # Search for matching post in content index
-            best_match = None
-            best_score = 0
-            best_match_id = None
-            
-            for post_id, post_data in content_index.items():
-                # Calculate relevance score
-                score = 0
-                post_title = post_data.get('title', '').lower()
-                post_topics = post_data.get('topics', [])
-                post_tags = post_data.get('tags', [])
-                
-                # Exact title match
-                if placeholder_topic.lower() == post_title:
-                    score += 20
-                
-                # Partial title match
-                elif placeholder_topic.lower() in post_title:
-                    score += 10
-                
-                # Check if placeholder matches topics
-                for topic in post_topics:
-                    if placeholder_topic.lower() == topic.lower():
-                        score += 15
-                    elif placeholder_topic.lower() in topic.lower():
-                        score += 8
-                
-                # Check if placeholder matches tags
-                for tag in post_tags:
-                    if placeholder_topic.lower() == tag.lower():
-                        score += 12
-                    elif placeholder_topic.lower() in tag.lower():
-                        score += 6
-                
-                # Fuzzy matching for similar titles
-                similarity = SequenceMatcher(None, placeholder_topic.lower(), post_title).ratio()
-                if similarity > 0.6:
-                    score += int(similarity * 10)
-                
-                if score > best_score:
-                    best_score = score
-                    best_match = post_data
-                    best_match_id = post_id
-            
-            # Use a lower threshold for matching
-            if best_match and best_score >= 6:
-                # Replace placeholder with actual link
-                post_url = best_match.get('url', '')
-                post_title = best_match.get('title', placeholder_topic)
-                
-                if post_url:
-                    link_html = f'<a href="{post_url}" title="{post_title}">{placeholder_topic}</a>'
-                    modified_content = modified_content.replace(f'[LINK: {placeholder_topic}]', link_html)
-                    links_converted += 1
-                    logger.info(f"Converted placeholder: '{placeholder_topic}' -> '{post_title}' (score: {best_score})")
+            pattern = re.compile(r'\b' + re.escape(anchor) + r'\b', re.IGNORECASE)
+            for text_node in soup.find_all(string=True):
+                if text_node.parent.name in {'a', 'code', 'pre', 'script', 'style'}:
+                    continue
+                match = pattern.search(str(text_node))
+                if not match:
+                    continue
+                value = str(text_node)
+                nodes = []
+                if value[:match.start()]:
+                    nodes.append(value[:match.start()])
+                tag = soup.new_tag('a', href=url, title=str(link.target_title or '')[:200])
+                tag.string = value[match.start():match.end()]
+                nodes.append(tag)
+                if value[match.end():]:
+                    nodes.append(value[match.end():])
+                text_node.replace_with(*nodes)
+                applied += 1
+                break
+        logger.info(f"Applied {applied}/{len(links)} internal links")
+        return str(soup)
+
+    def process_link_placeholders(self, content: str,
+                                content_index: Dict[str, Dict]) -> str:
+        """Replace link markers in prose while leaving code samples untouched."""
+        from difflib import SequenceMatcher
+        from urllib.parse import urlparse
+
+        soup = BeautifulSoup(content, 'html.parser')
+        placeholder_re = re.compile(r'\[LINK:\s*([^\]]+)\]', re.IGNORECASE)
+        converted = 0
+        for text_node in list(soup.find_all(string=placeholder_re)):
+            if text_node.parent.name in {'a', 'code', 'pre', 'script', 'style'}:
+                continue
+            value = str(text_node)
+            pieces = []
+            cursor = 0
+            for match in placeholder_re.finditer(value):
+                if value[cursor:match.start()]:
+                    pieces.append(value[cursor:match.start()])
+                topic = match.group(1).strip()
+                best_match = None
+                best_score = 0
+                for post in content_index.values():
+                    title = str(post.get('title', ''))
+                    score = 20 if topic.casefold() == title.casefold() else (10 if topic.casefold() in title.casefold() else 0)
+                    for candidate in post.get('topics', []) + post.get('tags', []):
+                        candidate = str(candidate)
+                        if topic.casefold() == candidate.casefold():
+                            score = max(score, 15)
+                        elif topic.casefold() in candidate.casefold():
+                            score = max(score, 8)
+                    score = max(score, int(SequenceMatcher(None, topic.casefold(), title.casefold()).ratio() * 10))
+                    if score > best_score:
+                        best_match, best_score = post, score
+                url = str(best_match.get('url', '')) if best_match and best_score >= 6 else ''
+                if urlparse(url).scheme in {'http', 'https'}:
+                    anchor = soup.new_tag('a', href=url, title=str(best_match.get('title', topic))[:200])
+                    anchor.string = topic
+                    pieces.append(anchor)
+                    converted += 1
                 else:
-                    logger.warning(f"Match found but no URL for: {placeholder_topic}")
-                    modified_content = modified_content.replace(f'[LINK: {placeholder_topic}]', placeholder_topic)
-            else:
-                # Remove placeholder if no match found
-                logger.warning(f"No match found for placeholder: '{placeholder_topic}' (best score: {best_score})")
-                if best_match:
-                    logger.warning(f"Closest match was: '{best_match.get('title', 'Unknown')}' with score {best_score}")
-                modified_content = modified_content.replace(f'[LINK: {placeholder_topic}]', placeholder_topic)
-        
-        logger.info(f"Converted {links_converted}/{len(placeholders)} link placeholders")
-        return modified_content
-    
+                    pieces.append(topic)
+                cursor = match.end()
+            if value[cursor:]:
+                pieces.append(value[cursor:])
+            text_node.replace_with(*pieces)
+        logger.info(f"Converted {converted} link placeholders")
+        return str(soup)
+
     def suggest_backlinks(self, new_post: Dict,
                          content_index: Dict[str, Dict]) -> List[Dict]:
         """Suggest existing posts that should link to the new post"""

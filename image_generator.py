@@ -31,6 +31,11 @@ class ImageGenerator:
         
         for i, prompt in enumerate(prompts):
             try:
+                # Ensure prompt is a string
+                if not isinstance(prompt, str):
+                    prompt = str(prompt)
+                    logger.warning(f"Converted non-string prompt to string: {type(prompt)}")
+                
                 image_path = self._generate_with_dalle(prompt, i)
                 
                 if image_path:

@@ -2,13 +2,15 @@
 Configuration management for Blog AI Agent
 """
 import os
+import sys
 from pathlib import Path
 from dotenv import load_dotenv
 from typing import Optional
 from pydantic import Field, BaseModel
 
 # Load environment variables
-load_dotenv()
+_BASE_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
+load_dotenv(_BASE_DIR / ".env")
 
 class Config(BaseModel):
     """Application configuration"""
@@ -54,13 +56,13 @@ class Config(BaseModel):
     
     # Blog Configuration
     blog_domain: str = Field(default_factory=lambda: os.getenv("BLOG_DOMAIN", ""))
-    blog_niche: str = Field(default_factory=lambda: os.getenv("BLOG_NICHE", "technology"))
-    target_audience: str = Field(default_factory=lambda: os.getenv("TARGET_AUDIENCE", "general"))
+    blog_niche: str = Field(default_factory=lambda: os.getenv("BLOG_NICHE", "programming/technical"))
+    target_audience: str = Field(default_factory=lambda: os.getenv("TARGET_AUDIENCE", "software_developers"))
     
     # Project Paths
-    project_root: Path = Field(default_factory=lambda: Path(__file__).parent)
-    data_dir: Path = Field(default_factory=lambda: Path(__file__).parent / "data")
-    output_dir: Path = Field(default_factory=lambda: Path(__file__).parent / "output")
+    project_root: Path = Field(default_factory=lambda: _BASE_DIR)
+    data_dir: Path = Field(default_factory=lambda: _BASE_DIR / "data")
+    output_dir: Path = Field(default_factory=lambda: _BASE_DIR / "output")
     
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
