@@ -65,12 +65,10 @@ class SEOResearcher:
                 {
                     "role": "user",
                     "content": f"""Analyze this blog content and provide:
-1. Main themes and topics covered (focus on programming/technical concepts)
-2. Content gaps (what's missing in programming/technical topics)
+1. Main themes and topics covered in the blog's configured niche
+2. Content gaps in those themes
 3. Overlapping topics that could be consolidated
-4. Audience interests based on content (software developers)
-
-IMPORTANT: Ignore DevOps, CI/CD, Docker, Kubernetes, infrastructure, deployment, cloud services, build tools, monitoring tools topics. Focus ONLY on programming concepts, algorithms, data structures, programming languages, software engineering fundamentals.
+4. Audience interests based on existing content and the configured target audience
 
 Blog niche: {self.blog_niche}
 Target audience: {self.target_audience}
@@ -101,23 +99,21 @@ Content sample:
             messages=[
                 {
                     "role": "system",
-                    "content": """You are an SEO research expert. Identify high-demand, low-competition blog topics.
-                    CRITICAL: Focus ONLY on programming concepts, algorithms, data structures, programming languages, software engineering fundamentals, and technical concepts.
-                    EXCLUDE: DevOps, CI/CD, Docker, Kubernetes, infrastructure, deployment, cloud services, build tools, monitoring tools, and any operational/deployment topics.
+                    "content": """You are an SEO research expert. Identify high-demand, low-competition blog topics that fit the supplied niche and audience.
                     Always return valid JSON with an 'opportunities' array."""
                 },
                 {
                     "role": "user",
-                    "content": f"""Suggest exactly {num_opportunities} blog topic opportunities for a {self.blog_niche} blog targeting {self.target_audience}.
+                    "content": f"""Suggest exactly {num_opportunities} blog topic opportunities for a {self.blog_niche} blog targeting {self.target_audience}. Preferred post format: {config.blog_post_type}.
 
 Requirements:
 1. High search demand topics
 2. Low SEO difficulty
-3. Fit the blog niche perfectly - PROGRAMMING CONCEPTS ONLY
-4. Appeal to the target audience - SOFTWARE DEVELOPERS
+3. Fit the configured blog niche and post type
+4. Appeal to the configured target audience
 5. Fill content gaps
-6. EXCLUDE DevOps, CI/CD, Docker, Kubernetes, infrastructure, deployment, cloud services, build tools, monitoring tools
-7. FOCUS ON: programming languages, algorithms, data structures, design patterns, software architecture, debugging techniques, code optimization, language features, frameworks concepts
+6. Avoid unrelated topics; do not impose a narrower theme than the configured niche
+7. Select formats and angles that suit the configured blog post type
 
 For each topic, provide:
 - topic: string (the main topic)
@@ -221,129 +217,32 @@ Return ONLY this JSON structure:
             return self._get_fallback_opportunities(num_opportunities)
     
     def _get_fallback_opportunities(self, num_opportunities: int) -> List[TopicOpportunity]:
-        """Generate fallback topic opportunities when AI fails"""
-        logger.info("Using fallback topic opportunities")
-        
-        fallback_topics = [
-            {
-                "topic": "Recursion Fundamentals",
-                "keywords": ["recursion", "programming concepts", "algorithms", "computer science"],
-                "search_volume": 78,
-                "difficulty": 28,
-                "opportunity_score": 88,
-                "trend": "stable",
-                "suggested_title": "Understanding Recursion: From Basics to Advanced Patterns",
-                "content_outline": ["What is recursion", "Base case and recursive case", "Common recursion patterns", "Stack overflow prevention", "Real-world examples", "When to use recursion vs iteration"]
-            },
-            {
-                "topic": "Algorithm Efficiency Analysis",
-                "keywords": ["big o notation", "algorithm complexity", "time complexity", "space complexity"],
-                "search_volume": 82,
-                "difficulty": 32,
-                "opportunity_score": 85,
-                "trend": "rising",
-                "suggested_title": "Big O Notation Explained: How to Analyze Algorithm Efficiency",
-                "content_outline": ["Why algorithm efficiency matters", "Understanding Big O notation", "Common complexity classes", "Time vs space complexity", "Practical analysis examples", "Optimization strategies"]
-            },
-            {
-                "topic": "Design Patterns Essentials",
-                "keywords": ["design patterns", "software architecture", "object oriented", "software design"],
-                "search_volume": 75,
-                "difficulty": 35,
-                "opportunity_score": 82,
-                "trend": "stable",
-                "suggested_title": "Design Patterns Every Developer Should Know: Singleton to Observer",
-                "content_outline": ["What are design patterns", "Creational patterns", "Structural patterns", "Behavioral patterns", "When to use each pattern", "Real-world implementation examples"]
-            },
-            {
-                "topic": "JavaScript Async Programming",
-                "keywords": ["async await", "promises", "javascript concurrency", "event loop"],
-                "search_volume": 80,
-                "difficulty": 30,
-                "opportunity_score": 86,
-                "trend": "rising",
-                "suggested_title": "Async/Await vs Promises: Modern JavaScript Concurrency",
-                "content_outline": ["Synchronous vs asynchronous", "Promise fundamentals", "Async/await syntax", "Error handling", "Common pitfalls", "Performance considerations"]
-            },
-            {
-                "topic": "Database Fundamentals",
-                "keywords": ["database indexing", "sql vs nosql", "database optimization", "data structures"],
-                "search_volume": 77,
-                "difficulty": 33,
-                "opportunity_score": 83,
-                "trend": "stable",
-                "suggested_title": "Database Indexing: Speed Up Your Queries Dramatically",
-                "content_outline": ["Why indexing matters", "How database indexes work", "Types of indexes", "Query optimization", "When to index", "Performance impact"]
-            },
-            {
-                "topic": "Python Decorators",
-                "keywords": ["python decorators", "python metaprogramming", "python functions", "python advanced"],
-                "search_volume": 72,
-                "difficulty": 38,
-                "opportunity_score": 80,
-                "trend": "stable",
-                "suggested_title": "Python Decorators: Simplify Your Code with Elegant Patterns",
-                "content_outline": ["What are decorators", "Function decorators", "Class decorators", "Decorator with arguments", "Real-world use cases", "Best practices"]
-            },
-            {
-                "topic": "TypeScript Generics",
-                "keywords": ["typescript generics", "type safety", "typescript advanced", "generic programming"],
-                "search_volume": 74,
-                "difficulty": 36,
-                "opportunity_score": 81,
-                "trend": "rising",
-                "suggested_title": "TypeScript Generics: Write Flexible, Type-Safe Code",
-                "content_outline": ["Why generics matter", "Basic generic syntax", "Generic constraints", "Generic functions", "Generic classes", "Real-world examples"]
-            },
-            {
-                "topic": "Hash Tables Deep Dive",
-                "keywords": ["hash tables", "hashing", "data structures", "algorithm efficiency"],
-                "search_volume": 70,
-                "difficulty": 34,
-                "opportunity_score": 79,
-                "trend": "stable",
-                "suggested_title": "Understanding Hash Tables: The Backbone of Fast Lookups",
-                "content_outline": ["What is a hash table", "Hash functions", "Collision resolution", "Time complexity", "Implementation examples", "When to use hash tables"]
-            },
-            {
-                "topic": "Binary Search Trees",
-                "keywords": ["binary search trees", "bst", "tree data structures", "algorithms"],
-                "search_volume": 68,
-                "difficulty": 37,
-                "opportunity_score": 78,
-                "trend": "stable",
-                "suggested_title": "Binary Search Trees: Efficient Data Organization Explained",
-                "content_outline": ["What is a BST", "BST properties", "Insertion and deletion", "Traversal methods", "Time complexity analysis", "Real-world applications"]
-            },
-            {
-                "topic": "REST vs GraphQL",
-                "keywords": ["rest api", "graphql", "api design", "web development"],
-                "search_volume": 76,
-                "difficulty": 32,
-                "opportunity_score": 84,
-                "trend": "rising",
-                "suggested_title": "REST vs GraphQL: Choosing the Right API Architecture",
-                "content_outline": ["REST fundamentals", "GraphQL fundamentals", "Key differences", "When to use REST", "When to use GraphQL", "Migration strategies"]
-            }
+        """Create niche-aware fallback topics without assuming a fixed subject."""
+        niche = self.blog_niche.strip() or "general"
+        audience = self.target_audience.strip() or "general readers"
+        post_type = config.blog_post_type.strip() or "informative guide"
+        templates = [
+            (f"A beginner's guide to {niche}", f"Understanding {niche}: A Beginner's Guide", [f"What {niche} means", "Core concepts", "A practical example", "Common questions", "Next steps"]),
+            (f"Choosing the right approach to {niche}", f"How to Choose the Right Approach to {niche}", ["The decision to make", "Options to consider", "Comparison criteria", "Common tradeoffs", "A decision framework"]),
+            (f"Common mistakes with {niche}", f"Common {niche} Mistakes and How to Avoid Them", ["Why mistakes happen", "Frequent pitfalls", "How to recognize them", "Practical fixes", "Prevention checklist"]),
+            (f"Best practices for {niche}", f"{niche}: Practical Best Practices for {audience}", ["Goals and constraints", "Recommended practices", "Examples", "What to avoid", "A practical checklist"]),
         ]
-        
         opportunities = []
-        for i, topic_data in enumerate(fallback_topics[:num_opportunities]):
-            opportunity = TopicOpportunity(
-                topic=topic_data["topic"],
-                keywords=topic_data["keywords"],
-                search_volume=topic_data["search_volume"],
-                difficulty=topic_data["difficulty"],
-                opportunity_score=topic_data["opportunity_score"],
-                trend=topic_data["trend"],
-                suggested_title=topic_data["suggested_title"],
-                content_outline=topic_data["content_outline"]
-            )
-            opportunities.append(opportunity)
-        
-        logger.info(f"Generated {len(opportunities)} fallback opportunities")
+        for topic, title, outline in templates[:max(0, num_opportunities)]:
+            words = [word.strip('.,:') for word in topic.split() if len(word.strip('.,:')) > 3]
+            opportunities.append(TopicOpportunity(
+                topic=topic,
+                keywords=list(dict.fromkeys([topic.lower(), *[word.lower() for word in words]]))[:5],
+                search_volume=0,
+                difficulty=50,
+                opportunity_score=50,
+                trend="stable",
+                suggested_title=title,
+                content_outline=outline,
+            ))
+        logger.info("Generated %d fallback opportunities for niche %s and format %s", len(opportunities), niche, post_type)
         return opportunities
-    
+
     def generate_seo_keywords(self, topic: str, existing_keywords: List[str]) -> Dict:
         """Generate SEO-friendly keywords for a topic"""
         logger.info(f"Generating SEO keywords for topic: {topic}")
@@ -358,8 +257,6 @@ Return ONLY this JSON structure:
                 {
                     "role": "user",
                     "content": f"""Generate SEO keywords for the topic: "{topic}"
-
-IMPORTANT: Focus ONLY on programming concepts, algorithms, data structures, programming languages, software engineering fundamentals. Ignore DevOps, CI/CD, Docker, Kubernetes, infrastructure, deployment, cloud services, build tools, monitoring tools topics.
 
 Blog niche: {self.blog_niche}
 Target audience: {self.target_audience}
@@ -400,8 +297,6 @@ Return as JSON."""
                     "role": "user",
                     "content": f"""For the topic "{topic}" in the {self.blog_niche} niche:
 
-IMPORTANT: Focus ONLY on programming concepts, algorithms, data structures, programming languages, software engineering fundamentals. Ignore DevOps, CI/CD, Docker, Kubernetes, infrastructure, deployment, cloud services, build tools, monitoring tools topics.
-
 1. Identify what type of content ranks well
 2. Find content gaps (what's missing from top results)
 3. Suggest unique angles or perspectives
@@ -436,16 +331,10 @@ Provide analysis as structured JSON."""
                     "role": "user",
                     "content": f"""Identify 10 trending topics in the {self.blog_niche} niche that would appeal to {self.target_audience}.
 
-CRITICAL: Focus ONLY on programming concepts, algorithms, data structures, programming languages, software engineering fundamentals, and technical concepts.
-EXCLUDE: DevOps, CI/CD, Docker, Kubernetes, infrastructure, deployment, cloud services, build tools, monitoring tools, and any operational/deployment topics.
-
 Focus on:
-- Recent developments in programming languages and frameworks
-- Emerging programming concepts and patterns
-- Popular programming techniques and best practices
-- New features in programming languages
-- Software engineering methodologies
-- Debugging and optimization techniques
+- Relevant developments and trends within the configured blog niche
+- Emerging ideas, products, methods, or practices relevant to the audience
+- Frequently asked questions and seasonal interests for the niche
 
 Return as a simple list."""
                 }

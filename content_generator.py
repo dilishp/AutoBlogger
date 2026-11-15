@@ -78,6 +78,11 @@ class ContentGenerator:
         competitor_info = ""
         if competitor_analysis:
             competitor_info = f"\nCompetitor Analysis:\n{competitor_analysis}"
+        channel_cta = ""
+        if config.youtube_channel_name or config.youtube_channel_url:
+            channel_cta = "If relevant, include a brief subscription invitation for " + " ".join(
+                value for value in (config.youtube_channel_name, config.youtube_channel_url) if value
+            ) + "."
         
         response = self.client.chat.completions.create(
             model=config.openai_model_content,
@@ -85,29 +90,22 @@ class ContentGenerator:
             messages=[
                 {
                     "role": "system",
-                    "content": f"""You are an elite content writer and SEO specialist specializing in {self.blog_niche}. 
-                    You write engaging, well-structured blog posts that are optimized for search engines and provide genuine value to {self.target_audience}.
+                    "content": f"""You are an expert content writer and SEO specialist for a blog about {self.blog_niche}.
+                    Write for {self.target_audience}. Create the requested format: {config.blog_post_type}.
                     
                     Your writing style:
-                    - Technical yet accessible
-                    - Educational with clear explanations
-                    - Practical with code examples
-                    - Authoritative with deep technical knowledge
-                    - Focused on programming concepts, algorithms, and software engineering fundamentals
-                    - Backed by computer science theory and best practices
+                    - Match the language, expertise, tone, and examples to the blog niche and audience
+                    - Use technical detail, code, recipes, comparisons, or practical steps only when they suit the topic
                     
                     Blog niche: {self.blog_niche}
                     Target audience: {self.target_audience}
                     Blog domain: {self.blog_domain}
                     
                     Quality standards:
-                    - Include specific technical details, code examples, and diagrams descriptions
-                    - Use real-world programming scenarios and use cases
-                    - Provide clear explanations of complex concepts
-                    - Include complexity analysis (time/space) where relevant
-                    - Reference authoritative sources like CLRS, Design Patterns, or language documentation
-                    - Avoid oversimplification - respect the technical depth
-                    - Include practical implementation tips and common pitfalls
+                    - Provide accurate, useful details and examples that fit the subject
+                    - Explain complex concepts at a level appropriate for the configured audience
+                    - Reference reliable sources only when relevant and known
+                    - Include practical advice and common pitfalls where useful
                     - Do not invent benchmarks, statistics, quotes, studies, or source URLs
                     - Separate established facts from assumptions; explain when evidence is unavailable
                     - Use a concrete worked example and explain why each step matters
@@ -119,6 +117,7 @@ class ContentGenerator:
 
 Topic: {opportunity.topic}
 Suggested Title: {opportunity.suggested_title}
+Preferred Post Format: {config.blog_post_type}
 Keywords: {', '.join(opportunity.keywords)}
 Search Volume: {opportunity.search_volume if hasattr(opportunity, 'search_volume') else 'N/A'}
 Competition Level: {opportunity.competition if hasattr(opportunity, 'competition') else 'N/A'}
@@ -128,23 +127,23 @@ Content Outline:
 
 Requirements:
 1. Use the suggested title or create a better SEO-optimized title that includes primary keyword
-2. Write 1000-1500 words of high-quality, useful technical content (clear, educational format)
-3. Include 2-3 specific technical details, code examples, or algorithmic analysis
-4. Include at least 1 real-world programming scenario or use case
-5. Format code examples using HTML: <code> for inline code, <pre><code> for multi-line code blocks
-6. Use proper HTML formatting throughout (paragraphs, headings, lists, code blocks)
+2. Write 1000-1500 words appropriate to the subject and configured audience
+3. Use clear explanations and subject-appropriate examples; include code only when relevant
+4. Include at least one practical scenario or use case where appropriate
+5. Format code examples in HTML only when the subject calls for code
+6. Use proper HTML formatting throughout (paragraphs, headings, lists, and relevant examples)
 7. Include [IMAGE: description] markers where diagrams or visualizations should be inserted
-8. Include a compelling introduction that explains why this concept matters to developers
+8. Include a compelling introduction that explains why this topic matters to the configured audience
 9. Use clear H2 and H3 headings for structure
 10. Include practical implementation tips and common pitfalls to avoid
-11. Write in a technical yet accessible tone suitable for software developers
-12. Include a strong conclusion with call-to-action to subscribe to the YouTube channel
+11. Match the tone and expertise level to the configured blog niche and audience
+12. End with a useful conclusion. {channel_cta}
 13. Naturally incorporate the primary and secondary keywords
-14. Add placeholder markers for internal links using SPECIFIC, DESCRIPTIVE topic names like: [LINK: recursion fundamentals], [LINK: algorithm efficiency analysis], [LINK: design patterns essentials] - NOT generic terms like "related topic"
+14. Add placeholder markers for internal links using specific, descriptive phrases from this blog's subject, not generic terms like "related topic"
 15. Focus on clear explanations of concepts - provide depth without overwhelming
-16. Include this linked call-to-action in the conclusion: <a href="https://www.youtube.com/@catchybytes71">Subscribe to CatchyBytes by Techy on YouTube</a> for more programming tutorials
+16. Do not invent brand names, social accounts, or calls to action. Use only configured brand details.
 17. Add a unique technical insight or perspective that differentiates this from similar content
-18. Include complexity analysis (Big O notation) where relevant
+18. Include specialized analysis or metrics only when relevant
 19. Reference authoritative sources only when confident they exist; never fabricate links or citations
 20. Ensure each HTML element is properly nested and closed; keep code examples escaped inside <pre><code>
 
@@ -318,7 +317,7 @@ Return as JSON array of prompt strings."""
                 messages=[
                 {
                     "role": "system",
-                    "content": "You are an experienced technical editor. Improve clarity, usefulness, accuracy, and structure while preserving HTML and technical meaning. Never add unsupported facts or citations. Return only valid JSON."
+                    "content": f"You are an experienced editor for the {self.blog_niche} niche and {self.target_audience} audience. Improve clarity, usefulness, accuracy, and structure while preserving HTML and meaning. Never add unsupported facts or citations. Return only valid JSON."
                 },
                 {
                     "role": "user",
@@ -331,7 +330,7 @@ Meta Description: {blog_post.meta_description}
 Content HTML:
 {blog_post.content[:18000]}
 
-Improve vague or repetitive passages, make steps/examples concrete, preserve useful details, all image/link markers, and the exact CatchyBytes YouTube subscription link, use concise paragraphs and a logical H2/H3 structure, and do not keyword-stuff. Keep code escaped inside pre/code blocks. Return JSON with title, content (HTML fragment), and meta_description. Do not include markdown fences."""
+Improve vague or repetitive passages, make examples concrete when relevant, preserve useful details and all image/link markers, use concise paragraphs and a logical H2/H3 structure, and do not keyword-stuff. Preserve any configured channel details already present but do not invent them. Keep code escaped inside pre/code blocks when code is relevant. Return JSON with title, content (HTML fragment), and meta_description. Do not include markdown fences."""
                 }
                 ],
                 response_format={"type": "json_object"}

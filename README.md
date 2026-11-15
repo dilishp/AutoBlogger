@@ -90,28 +90,35 @@ GOOGLE_CLIENT_ID=your_google_client_id_here
 GOOGLE_CLIENT_SECRET=your_google_client_secret_here
 
 # Blog Settings
-BLOG_DOMAIN=simplifyyourday.blogspot.com
-BLOG_NICHE=productivity/lifestyle
-TARGET_AUDIENCE=general_professionals
+BLOG_DOMAIN=your-blog.example
+BLOG_NICHE=general
+TARGET_AUDIENCE=general readers
+BLOG_POST_TYPE=informative guide
 ```
 
 ## Usage
 
 ### Desktop application
 
-The desktop interface is an additional entry point; the existing `python blog_agent.py` command and its options remain available. Install the project dependencies, then launch:
+The desktop interface is an additional entry point; the existing `python blog_agent.py` command and its options remain available. It reads `BLOG_NICHE`, `TARGET_AUDIENCE`, and `BLOG_POST_TYPE` from `.env` to shape topic research and article prompts. The shipped defaults are general-purpose; set these values for the customer's blog.
+
+The app is packaged in three editions: **Basic** (blog publishing), **Video** (blog publishing and YouTube video), and **Social** (blog publishing, video, and social posts). Unavailable options are disabled in each edition. Blog illustrations are generated as part of the blog flow; video scenes generate their own visuals. The desktop app does not run the digital-product generator.
+
+Install the project dependencies, then launch the development version:
 
 ```bash
 python desktop_app.py
 ```
 
-Enter a topic or leave it blank to use the configured topics file and topic discovery. Choose whether to publish to Blogger, generate images, create a video, and generate social posts. When Blogger publishing is off, the generated HTML is saved under `output/`. The execution log appears in the lower panel while the workflow runs. Use **Settings** to save provider credentials and model choices to `.env`.
+Enter a topic or leave it blank to use the configured topics file and topic discovery. Select **Generate blog post** only when you want blog content; video-only runs use the entered title and skip blog, Blogger, image, and social workflows. For richer video scripts, provide details in the topic field. **Abort** stops the workflow after the current API or rendering step finishes. When Blogger publishing is off, generated blog HTML is saved under `output/`. Use **Settings** to save provider credentials, model choices, and optional `YOUTUBE_CHANNEL_NAME` / `YOUTUBE_CHANNEL_URL` branding to `.env`; choose your Google OAuth Desktop App JSON in the Blogger OAuth section.
 
-To build a Windows folder distribution, install PyInstaller and run:
+Build the three Windows folder distributions with PyInstaller:
 
 ```bash
 pip install pyinstaller
-pyinstaller --noconfirm --clean --windowed --onedir --name BlogAIAgent --add-data ".env.example;." desktop_app.py
+pyinstaller --noconfirm --clean --windowed --onedir --name BlogAIAgent_Basic --add-data ".env.example;." desktop_app.py
+pyinstaller --noconfirm --clean --windowed --onedir --name BlogAIAgent_Video --add-data ".env.example;." desktop_app.py
+pyinstaller --noconfirm --clean --windowed --onedir --name BlogAIAgent_Social --add-data ".env.example;." desktop_app.py
 ```
 
 Distribute the complete `dist/BlogAIAgent/` folder. Keep the folder writable so the app can save `.env`, credentials, and generated output beside the executable. Do not include your development `.env` or API credentials in a customer build. Each customer should enter their own credentials in Settings.

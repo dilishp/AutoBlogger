@@ -53,7 +53,7 @@ class BloggerClient:
                 if not credentials_path.exists():
                     raise FileNotFoundError(
                         "credentials.json not found. Please download it from Google Cloud Console "
-                        "and place it in the data directory."
+                        "then select it in Settings under Blogger OAuth credentials."
                     )
                 flow = InstalledAppFlow.from_client_secrets_file(
                     str(credentials_path), SCOPES

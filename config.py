@@ -12,6 +12,17 @@ from pydantic import Field, BaseModel
 _BASE_DIR = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parent
 load_dotenv(_BASE_DIR / ".env")
 
+
+def _int_env(name: str, default: int) -> int:
+    """Read an integer setting, treating an empty value like an unset value."""
+    value = os.getenv(name, "").strip()
+    if not value:
+        return default
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an integer; got {value!r}") from exc
+
 class Config(BaseModel):
     """Application configuration"""
     
@@ -26,10 +37,10 @@ class Config(BaseModel):
     openai_model_social: str = Field(default_factory=lambda: os.getenv("OPENAI_MODEL_SOCIAL", "gpt-4o"))
     
     # Token Configuration - Optimal tokens for different workflows
-    max_tokens_content: int = Field(default_factory=lambda: int(os.getenv("MAX_TOKENS_CONTENT", "2000")))
-    max_tokens_digital_product: int = Field(default_factory=lambda: int(os.getenv("MAX_TOKENS_DIGITAL_PRODUCT", "4000")))
-    max_tokens_seo: int = Field(default_factory=lambda: int(os.getenv("MAX_TOKENS_SEO", "1500")))
-    max_tokens_social: int = Field(default_factory=lambda: int(os.getenv("MAX_TOKENS_SOCIAL", "1000")))
+    max_tokens_content: int = Field(default_factory=lambda: _int_env("MAX_TOKENS_CONTENT", 2000))
+    max_tokens_digital_product: int = Field(default_factory=lambda: _int_env("MAX_TOKENS_DIGITAL_PRODUCT", 4000))
+    max_tokens_seo: int = Field(default_factory=lambda: _int_env("MAX_TOKENS_SEO", 1500))
+    max_tokens_social: int = Field(default_factory=lambda: _int_env("MAX_TOKENS_SOCIAL", 1000))
     
     # Topic file configuration
     topics_file_path: str = Field(default_factory=lambda: os.getenv("TOPICS_FILE_PATH", "data/topics.txt"))
@@ -56,8 +67,11 @@ class Config(BaseModel):
     
     # Blog Configuration
     blog_domain: str = Field(default_factory=lambda: os.getenv("BLOG_DOMAIN", ""))
-    blog_niche: str = Field(default_factory=lambda: os.getenv("BLOG_NICHE", "programming/technical"))
-    target_audience: str = Field(default_factory=lambda: os.getenv("TARGET_AUDIENCE", "software_developers"))
+    blog_niche: str = Field(default_factory=lambda: os.getenv("BLOG_NICHE", "general"))
+    target_audience: str = Field(default_factory=lambda: os.getenv("TARGET_AUDIENCE", "general readers"))
+    blog_post_type: str = Field(default_factory=lambda: os.getenv("BLOG_POST_TYPE", "informative guide"))
+    youtube_channel_name: str = Field(default_factory=lambda: os.getenv("YOUTUBE_CHANNEL_NAME", ""))
+    youtube_channel_url: str = Field(default_factory=lambda: os.getenv("YOUTUBE_CHANNEL_URL", ""))
     
     # Project Paths
     project_root: Path = Field(default_factory=lambda: _BASE_DIR)

@@ -25,8 +25,9 @@ logger = logging.getLogger(__name__)
 class BlogAIAgent:
     """Main AI agent for automated blog content creation and promotion"""
     
-    def __init__(self):
+    def __init__(self, abort_event=None):
         logger.info("Initializing Blog AI Agent...")
+        self.abort_event = abort_event
         
         # Initialize all components
         self.blogger_client = BloggerClient()
@@ -45,6 +46,10 @@ class BlogAIAgent:
         self.content_index = {}
         
         logger.info("Blog AI Agent initialized successfully")
+
+    def _check_abort(self):
+        if self.abort_event and self.abort_event.is_set():
+            raise InterruptedError("Workflow aborted by user")
     
     def run_full_workflow(self, num_topics: int = 1, 
                          generate_images: bool = True,
@@ -89,6 +94,7 @@ class BlogAIAgent:
             
             # Process each opportunity
             for i, opportunity in enumerate(opportunities[:num_topics]):
+                self._check_abort()
                 logger.info(f"\nProcessing topic {i+1}/{num_topics}: {opportunity.topic}")
                 
                 post_result = self._process_single_opportunity(
@@ -101,21 +107,31 @@ class BlogAIAgent:
                 )
                 
                 workflow_result['posts_created'].append(post_result)
+                if post_result.get('cancelled'):
+                    workflow_result['status'] = 'cancelled'
+                    break
                 
                 # Mark topic as done if it came from a file and was successful
                 if topics_file and post_result.get('success'):
                     self._mark_topic_as_done(topics_file, opportunity.topic)
             
             workflow_result['end_time'] = datetime.now().isoformat()
-            workflow_result['status'] = 'completed'
-            
-            logger.info("=" * 60)
-            logger.info("Workflow Completed Successfully")
-            logger.info("=" * 60)
+            if workflow_result.get('status') != 'cancelled':
+                workflow_result['status'] = 'completed'
+                logger.info("=" * 60)
+                logger.info("Workflow Completed Successfully")
+                logger.info("=" * 60)
+            else:
+                logger.info("Workflow cancelled by user")
             
             return workflow_result
         
         except Exception as e:
+            if isinstance(e, InterruptedError):
+                workflow_result['status'] = 'cancelled'
+                workflow_result['end_time'] = datetime.now().isoformat()
+                logger.info("Workflow cancelled by user")
+                return workflow_result
             logger.error(f"Workflow failed: {e}")
             workflow_result['errors'].append(str(e))
             workflow_result['status'] = 'failed'
@@ -137,6 +153,7 @@ class BlogAIAgent:
         }
         
         try:
+            self._check_abort()
             # Step 1: Generate content
             logger.info("  - Generating blog content...")
             competitor_analysis = self.seo_researcher.analyze_competitors(opportunity.topic)
@@ -145,11 +162,13 @@ class BlogAIAgent:
                 self.existing_posts,
                 competitor_analysis
             )
+            self._check_abort()
             post_result['steps'].append('content_generation')
             
             # Step 2: Optimize for SEO
             logger.info("  - Optimizing content for SEO...")
             blog_post = self.content_generator.optimize_content_for_seo(blog_post)
+            self._check_abort()
             post_result['steps'].append('seo_optimization')
             
             # Step 3: Generate digital product
@@ -237,6 +256,7 @@ class BlogAIAgent:
                 image_paths = self.image_generator.generate_images(
                     blog_post.image_prompts
                 )
+                self._check_abort()
                 post_result['steps'].append('image_generation')
                 post_result['images'] = image_paths
                 
@@ -279,11 +299,13 @@ class BlogAIAgent:
             # Step 6: Analyze font style from existing posts
             logger.info("  - Analyzing font style from existing posts...")
             font_style = self.blogger_publisher.analyze_font_style(self.existing_posts)
+            self._check_abort()
             logger.info(f"  ✓ Using font style: {font_style}")
             
             publish_result = {'success': False, 'skipped': not publish_post}
             blog_post_url = ''
             if publish_post:
+                self._check_abort()
                 # Step 7: Publish to Blogger
                 logger.info("  - Publishing to Blogger...")
                 publish_result = self.blogger_publisher.publish_blog_post(
@@ -310,6 +332,7 @@ class BlogAIAgent:
                 # Step 8: Generate YouTube video
                 youtube_video_result = None
                 if generate_youtube_video:
+                    self._check_abort()
                     logger.info("  - Generating YouTube video...")
                     try:
                         # Generate video from blog post
@@ -345,6 +368,7 @@ class BlogAIAgent:
                 # Step 9: Generate social media posts
                 blog_post_dict = {'title': blog_post.title, 'content': blog_post.content, 'url': blog_post_url}
                 if generate_social_media:
+                    self._check_abort()
                     logger.info("  - Generating social media posts...")
                     social_posts = self.social_media_generator.generate_all_platforms(blog_post_dict)
                     post_result['steps'].append('social_media_generation')
@@ -383,6 +407,11 @@ class BlogAIAgent:
                 logger.error(f"  ✗ Failed to publish: {post_result['error']}")
         
         except Exception as e:
+            if isinstance(e, InterruptedError):
+                post_result['cancelled'] = True
+                post_result['error'] = str(e)
+                logger.info("Workflow cancelled by user")
+                return post_result
             logger.error(f"  ✗ Error processing opportunity: {e}")
             post_result['success'] = False
             post_result['error'] = str(e)

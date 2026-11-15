@@ -48,10 +48,13 @@ class YouTubeScriptGenerator:
     
     def generate_script_from_blog_post(self, blog_title: str, 
                                        blog_content: str,
-                                       target_duration: float = 60.0) -> YouTubeScript:
+                                       target_duration: float = 60.0,
+                                       channel_name: str = "",
+                                       channel_url: str = "") -> YouTubeScript:
         """Generate an engaging YouTube script from a blog post"""
         logger.info(f"Generating YouTube script from blog: {blog_title}")
         logger.info(f"Blog content length: {len(blog_content)} characters")
+        channel_cta = f'Promote the channel "{channel_name}" at {channel_url}' if channel_name and channel_url else (f'Promote the channel at {channel_url}' if channel_url else (f'Promote the channel "{channel_name}"' if channel_name else "Do not include a channel-specific subscription request"))
 
         # Use a worked, deterministic example for Fenwick trees. Generic image
         # prompts are unreliable for explaining exact array and tree values.
@@ -89,12 +92,12 @@ class YouTubeScriptGenerator:
                     - Optimize for watch time and engagement
                     
                     CRITICAL INSTRUCTIONS:
-                    - You MUST base the script ENTIRELY on the provided blog post content
-                    - Do NOT hallucinate or invent content not in the blog post
-                    - The visual descriptions MUST match the actual programming topic of the blog post
-                    - The script narration MUST accurately reflect the blog post's technical subject matter
-                    - Read the blog content carefully and extract the actual main concept, subtopics, and key points
-                    - Create visuals that specifically illustrate the programming concepts discussed in the blog post
+                    - If the source is a full article, base the script on it and do not add unsupported specifics
+                    - If the source is only a topic/title, create a self-contained beginner-friendly explainer from general knowledge
+                    - Do not invent statistics or claim they came from a source
+                    - The visual descriptions and narration MUST match the actual topic
+                    - Read the supplied source carefully and extract the main concept, subtopics, and key points
+                    - Create visuals that specifically illustrate the subject discussed in the source
                     - Prefer concrete examples and visual diagrams over abstract summaries
                     - For algorithms or data structures, show a small input, how internal state is formed, and how an operation changes it
                     
@@ -108,11 +111,11 @@ class YouTubeScriptGenerator:
                     Video duration: {target_duration} seconds
                     Number of scenes: {num_scenes}
                     
-                    IMPORTANT: Always reference the YouTube channel "CatchyBytes by Techy" with URL https://www.youtube.com/@catchybytes71 in the call-to-action and description."""
+                    Channel branding instructions: {channel_cta}."""
                 },
                 {
                     "role": "user",
-                    "content": f"""Create an engaging YouTube video script based EXACTLY on this blog post:
+                    "content": f"""Create an engaging YouTube video script based on this article or topic brief:
 
 Blog Title: {blog_title}
 
@@ -120,10 +123,10 @@ Blog Content (READ CAREFULLY - this is the ONLY source material):
 {content_to_use}
 
 CRITICAL REQUIREMENTS:
-1. The script MUST be about the actual topic in the blog post above
+1. The script MUST be about the actual topic in the source above. A short title is enough to create a general explainer.
 2. Create a catchy, SEO-optimized video title (different from blog title but same topic)
 3. Write a powerful 3-second hook that grabs attention immediately about THIS topic
-4. Create {num_scenes} scenes, each lasting about {avg_scene_duration} seconds
+4. Return exactly {num_scenes} scenes, each lasting about {avg_scene_duration} seconds. Never omit the scenes array.
 5. Each scene should have:
    - Script text (one clear idea, with enough detail to explain it within the scene duration)
    - Visual description (detailed and readable; continue the same example across scenes)
@@ -133,9 +136,9 @@ CRITICAL REQUIREMENTS:
    - Use visual metaphors and analogies that are easy to understand
    - Include specific visual elements (colors, objects, actions) relevant to the blog topic
    - Make the visual flow intuitive and followable
-7. Include a strong call-to-action at the end directing viewers to subscribe to "CatchyBytes by Techy" at https://www.youtube.com/@catchybytes71
+7. Include a strong call-to-action at the end. If channel branding is provided, direct viewers to {channel_cta}.
 8. Generate 5-10 relevant YouTube tags specific to this blog topic
-9. Write a compelling video description (under 5000 characters) that includes the channel name and URL
+9. Write a compelling video description (under 5000 characters). Include channel details only if provided.
 
 Script style:
 - Conversational, calm, and clearly paced
@@ -161,6 +164,27 @@ Return as JSON with these fields:
         import json
         try:
             script_data = json.loads(response.choices[0].message.content)
+
+            def scenes_are_valid(data):
+                scenes_data = data.get("scenes") if isinstance(data, dict) else None
+                return isinstance(scenes_data, list) and bool(scenes_data) and all(
+                    isinstance(item, dict) and item.get("script_text") and item.get("visual_description")
+                    for item in scenes_data
+                )
+
+            if not scenes_are_valid(script_data):
+                logger.warning("Video script response had no usable scenes; retrying once with a strict scene schema")
+                retry = self.client.chat.completions.create(
+                    model=config.openai_model,
+                    messages=[
+                        {"role": "system", "content": "Return only valid JSON with title, hook, scenes, call_to_action, tags, description. scenes must contain exactly " + str(num_scenes) + " objects with non-empty script_text, visual_description, and text_overlay strings. The source may be a short topic; create a general explainer. " + channel_cta},
+                        {"role": "user", "content": f"Topic/title: {blog_title}\nSource notes: {content_to_use}\nDuration: {target_duration} seconds. Return exactly {num_scenes} scenes; do not omit the scenes array."}
+                    ],
+                    response_format={"type": "json_object"}
+                )
+                script_data = json.loads(retry.choices[0].message.content)
+                if not scenes_are_valid(script_data):
+                    raise ValueError("The model returned no usable video scenes after one retry. Add more detail to the topic and try again.")
             
             # Log the generated script for verification
             logger.info(f"Generated video title: {script_data.get('title', 'N/A')}")
@@ -185,13 +209,13 @@ Return as JSON with these fields:
             
             # Create YouTubeScript object
             youtube_script = YouTubeScript(
-                title=script_data['title'],
-                hook=script_data['hook'],
+                title=script_data.get('title') or blog_title,
+                hook=script_data.get('hook') or f"In this video, learn {blog_title}.",
                 scenes=scenes,
-                call_to_action=script_data['call_to_action'],
+                call_to_action=script_data.get('call_to_action') or "Thanks for watching.",
                 total_duration=len(scenes) * avg_scene_duration,
-                tags=script_data['tags'],
-                description=script_data['description']
+                tags=script_data.get('tags') or [blog_title],
+                description=script_data.get('description') or f"A concise explainer about {blog_title}."
             )
             
             logger.info(f"Generated YouTube script with {len(scenes)} scenes")
@@ -490,28 +514,32 @@ class AudioGenerator:
         logger.info(f"Generated {len(audio_paths)} audio files")
         return audio_paths
     
-    def normalize_audio(self, audio_path: str, boost_db: float = 0.0) -> str:
+    def normalize_audio(self, audio_path: str, boost_db: float = 2.5) -> str:
         """Normalize audio and boost volume"""
         logger.info(f"Normalizing and boosting audio: {audio_path}")
         
         try:
             import pydub
             from pydub import AudioSegment
-            from pydub.effects import normalize
+            from pydub.effects import compress_dynamic_range, normalize
             
             # Load audio
             audio = AudioSegment.from_mp3(audio_path)
             
-            # Normalize with headroom, then cap any requested boost so the
-            # voice does not clip after normalization.
-            audio = normalize(audio, headroom=1.0)
-            safe_boost_db = max(0.0, min(boost_db, 0.5))
+            # Cut low-frequency rumble and even out narration before raising
+            # its average level. Leave headroom for AAC encoding.
+            audio = audio.high_pass_filter(80)
+            audio = compress_dynamic_range(
+                audio, threshold=-22.0, ratio=2.5, attack=5.0, release=60.0
+            )
+            audio = normalize(audio, headroom=3.0)
+            safe_boost_db = max(0.0, min(boost_db, 2.5))
             if safe_boost_db:
                 audio = audio + safe_boost_db
             
             # Save normalized audio
             normalized_path = audio_path.replace(".mp3", "_normalized.mp3")
-            audio.export(normalized_path, format="mp3")
+            audio.export(normalized_path, format="mp3", bitrate="192k")
             
             logger.info(f"Audio normalized and boosted: {normalized_path}")
             return normalized_path
@@ -716,7 +744,7 @@ class VideoComposer:
             output_path = self.output_dir / safe_filename
             
             logger.info(f"Writing video to: {output_path}")
-            clip.write_videofile(str(output_path), codec='libx264', audio_codec='aac', fps=24)
+            clip.write_videofile(str(output_path), codec='libx264', audio_codec='aac', audio_bitrate='192k', audio_fps=48000, fps=24)
             
             # Verify video file was created and has content
             if output_path.exists():
@@ -755,7 +783,10 @@ class YouTubeVideoGenerator:
                       target_duration: float = 60.0,
                       output_filename: str = "youtube_video.mp4",
                       add_audio: bool = True,
-                      normalize_audio: bool = True) -> Dict[str, any]:
+                      normalize_audio: bool = True,
+                      channel_name: Optional[str] = None,
+                      channel_url: Optional[str] = None,
+                      abort_event=None) -> Dict[str, any]:
         """Generate complete YouTube video from blog post"""
         logger.info(f"Starting YouTube video generation for: {blog_title}")
         
@@ -763,25 +794,33 @@ class YouTubeVideoGenerator:
             # Step 1: Generate script
             logger.info("Step 1: Generating engaging script...")
             script = self.script_generator.generate_script_from_blog_post(
-                blog_title, blog_content, target_duration
+                blog_title, blog_content, target_duration,
+                channel_name=channel_name if channel_name is not None else config.youtube_channel_name,
+                channel_url=channel_url if channel_url is not None else config.youtube_channel_url
             )
+            if abort_event and abort_event.is_set():
+                raise InterruptedError("Video generation aborted")
             
             # Step 2: Generate scene images
             logger.info("Step 2: Generating scene images...")
             script = self.image_generator.generate_scene_images(script)
+            if abort_event and abort_event.is_set():
+                raise InterruptedError("Video generation aborted")
             
             # Step 3: Generate per-scene audio narration
             scene_audio_paths = None
             if add_audio:
                 logger.info("Step 3: Generating per-scene audio narration...")
                 scene_audio_paths = self.audio_generator.generate_per_scene_audio(script)
+                if abort_event and abort_event.is_set():
+                    raise InterruptedError("Video generation aborted")
                 
                 # Normalize audio if requested
                 if normalize_audio:
                     logger.info("Step 3.5: Normalizing and boosting audio...")
                     normalized_paths = []
                     for audio_path in scene_audio_paths:
-                        normalized = self.audio_generator.normalize_audio(audio_path, boost_db=0.0)
+                        normalized = self.audio_generator.normalize_audio(audio_path, boost_db=2.5)
                         normalized_paths.append(normalized)
                     scene_audio_paths = normalized_paths
             
